@@ -20,7 +20,10 @@ func buildTargets(tmpl model.RequestTemplate, words, locations []string, maxJSON
 		if strings.HasPrefix(ct, "application/x-www-form-urlencoded") {
 			active = append(active, model.LocationForm)
 		}
-		if strings.Contains(ct, "application/json") || strings.Contains(ct, "+json") {
+		// JSON-shaped bodies are discovered from structure, not MIME type.
+		// This covers real applications that submit JSON with text/plain while
+		// preserving the captured Content-Type during replay.
+		if len(mutate.JSONObjectParents(tmpl.Body, maxJSONDepth)) > 0 {
 			active = append(active, model.LocationJSON)
 		}
 	}
