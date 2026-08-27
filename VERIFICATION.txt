@@ -1,0 +1,18 @@
+ParamIntel v0.1.1 verification
+Date: 2026-08-27
+
+Checks completed:
+- go test ./...: PASS (16 tests)
+- race detector: PASS for every Go package
+- go vet ./...: PASS
+- Linux amd64 build: PASS
+- Windows amd64 build: PASS
+- Linux CLI help smoke test: PASS (-verbose exposed)
+
+Focused regressions included:
+- GraphQL-style hidden `query` parameter: baseline 400 -> candidate 200, 3/3 candidate changes, 0/3 random-control changes, confidence HIGH.
+- Generic unknown-parameter behavior: candidates rejected when random negative controls reproduce the same response change.
+- JSON confidence output: perfect confidence is emitted numerically as 1.00 and includes confidence_label="high".
+- Verbose rejection diagnostics: explicit negative-control rejection reason is emitted.
+
+Note: the execution environment did not permit a separate background localhost server to be reached across processes, so network behavior is covered with Go httptest integration tests rather than an external-process live server smoke test.

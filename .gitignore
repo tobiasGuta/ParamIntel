@@ -1,0 +1,16 @@
+# Build outputs
+paramintel
+paramintel.exe
+dist/
+
+# Scan outputs / local requests
+findings.json
+findins.json
+request.txt
+*.log
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
