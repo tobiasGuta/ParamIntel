@@ -71,15 +71,16 @@ func Apply(tmpl model.RequestTemplate, mutations []model.Mutation) (model.Reques
 	}
 
 	if len(jsonMutations) > 0 {
-		contentType := strings.ToLower(out.Headers.Get("Content-Type"))
-		if !strings.Contains(contentType, "application/json") && !strings.Contains(contentType, "+json") {
-			return model.RequestTemplate{}, fmt.Errorf("json mutation requires a JSON content type")
-		}
+		// Some real applications send JSON syntax under generic content types
+		// such as text/plain. JSON discovery therefore follows the body
+		// structure rather than requiring a JSON MIME type. The original header
+		// is preserved so replay semantics remain faithful to the captured
+		// request.
 		var root any
 		dec := json.NewDecoder(bytes.NewReader(out.Body))
 		dec.UseNumber()
 		if err := dec.Decode(&root); err != nil {
-			return model.RequestTemplate{}, fmt.Errorf("parse json body: %w", err)
+			return model.RequestTemplate{}, fmt.Errorf("json mutation requires a parseable JSON body: %w", err)
 		}
 		obj, ok := root.(map[string]any)
 		if !ok {
@@ -111,7 +112,7 @@ func resolveObject(root map[string]any, path string) (map[string]any, error) {
 		return nil, fmt.Errorf("invalid JSON parent path %q", path)
 	}
 	cur := root
-	for _, part := range strings.Split(strings.TrimPrefix(path, "$.") , ".") {
+	for _, part := range strings.Split(strings.TrimPrefix(path, "$."), ".") {
 		next, ok := cur[part].(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf("JSON parent %q is not an object", path)
