@@ -23,4 +23,6 @@ jobs:
       - name: Race detector
         run: go test -race ./...
       - name: Build
-        run: go build -o paramintel ./cmd/paramintel
+        run: go build -trimpath -o paramintel ./cmd/paramintel
+      - name: Windows cross-build
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o paramintel-windows-amd64.exe ./cmd/paramintel

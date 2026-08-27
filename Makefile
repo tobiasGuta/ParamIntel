@@ -1,7 +1,10 @@
-.PHONY: build test race vet check clean
+.PHONY: build build-windows test race vet check clean
 
 build:
-	go build -o paramintel ./cmd/paramintel
+	go build -trimpath -o paramintel ./cmd/paramintel
+
+build-windows:
+	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o paramintel-windows-amd64.exe ./cmd/paramintel
 
 test:
 	go test ./...
@@ -15,4 +18,4 @@ vet:
 check: test race vet build
 
 clean:
-	rm -f paramintel coverage.out
+	rm -f paramintel paramintel.exe paramintel-* coverage.out
