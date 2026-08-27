@@ -53,6 +53,29 @@ func TestApplyNestedJSONWithTypedValue(t *testing.T) {
 	}
 }
 
+func TestApplyJSONWithTextPlainContentType(t *testing.T) {
+	tmpl := model.RequestTemplate{
+		Method:  "POST",
+		URL:     "https://example.test/api/checkout",
+		Headers: http.Header{"Content-Type": []string{"text/plain;charset=UTF-8"}},
+		Body:    []byte(`{"chosen_products":[{"product_id":"1","quantity":1}]}`),
+	}
+	out, err := Apply(tmpl, []model.Mutation{{Candidate: model.Candidate{Name: "chosen_discount", Location: model.LocationJSON, JSONParent: "$"}, Value: model.StringValue("probe")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := out.Headers.Get("Content-Type"); got != "text/plain;charset=UTF-8" {
+		t.Fatalf("content type changed: %q", got)
+	}
+	var body map[string]any
+	if err := json.Unmarshal(out.Body, &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["chosen_discount"] != "probe" {
+		t.Fatalf("json=%s", out.Body)
+	}
+}
+
 func TestJSONObjectParentsFindsObjectsButNotArrays(t *testing.T) {
 	parents := JSONObjectParents([]byte(`{"filters":{"nested":{"x":1}},"items":[{"hidden":true}]}`), 3)
 	sort.Strings(parents)
