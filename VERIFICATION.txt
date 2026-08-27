@@ -1,18 +1,28 @@
-ParamIntel v0.1.1 verification
+ParamIntel v0.2.0 verification
 Date: 2026-08-27
 
 Checks completed:
-- go test ./...: PASS (16 tests)
-- race detector: PASS for every Go package
+- go test -count=1 ./...: PASS
+- 30 tests passed across CLI, baseline, candidate, comparison, confidence, discovery, raw-request parsing, model, mutation, and semantics packages
 - go vet ./...: PASS
+- go test -race -count=1 ./...: PASS for every package
 - Linux amd64 build: PASS
-- Windows amd64 build: PASS
-- Linux CLI help smoke test: PASS (-verbose exposed)
+- Windows amd64 cross-build: PASS
+- CLI version smoke test: PASS (ParamIntel v0.2.0)
+- state-changing-method safety guard smoke test: PASS (POST refused without -allow-state-changing)
 
-Focused regressions included:
-- GraphQL-style hidden `query` parameter: baseline 400 -> candidate 200, 3/3 candidate changes, 0/3 random-control changes, confidence HIGH.
-- Generic unknown-parameter behavior: candidates rejected when random negative controls reproduce the same response change.
-- JSON confidence output: perfect confidence is emitted numerically as 1.00 and includes confidence_label="high".
-- Verbose rejection diagnostics: explicit negative-control rejection reason is emitted.
+Key v0.2 regressions/integration coverage:
+- v0.1 GraphQL-style hidden query parameter remains detected: baseline 400 -> candidate 200, 3/3 candidate changes, 0/3 controls
+- generic unknown query-parameter behavior remains rejected by negative controls
+- form-body parameter discovery finds a parameter ignored in the query string but recognized in application/x-www-form-urlencoded data
+- root JSON discovery finds a boolean parameter and infers boolean from a validation response
+- nested JSON discovery finds $.filters.limit and infers integer from a validation response
+- random JSON fields that all affect the response are rejected rather than reported as valid parameters
+- typed JSON profiling sends actual boolean/integer JSON values rather than strings
+- nested JSON object enumeration deliberately excludes arrays
+- automatic value profiling deliberately excludes business-state enum names such as role, status, and environment
+- empty finding sets serialize as [] instead of null
+- reports include version="0.2.0"
 
-Note: the execution environment did not permit a separate background localhost server to be reached across processes, so network behavior is covered with Go httptest integration tests rather than an external-process live server smoke test.
+Environment note:
+- An external-process localhost CLI smoke server could not be reached from the execution environment (connection refused even when started in the same shell). Network behavior is therefore validated with Go httptest integration tests, which exercise the real HTTP client, mutation engine, baseline, discovery, negative-control, type-inference, and characterization paths in-process.

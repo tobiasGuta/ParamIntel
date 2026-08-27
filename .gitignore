@@ -1,6 +1,7 @@
 # Build outputs
 paramintel
 paramintel.exe
+paramintel-*
 dist/
 
 # Scan outputs / local requests

@@ -52,19 +52,75 @@ func (c ConfidenceScore) MarshalJSON() ([]byte, error) {
 	return []byte(strconv.FormatFloat(float64(c), 'f', 2, 64)), nil
 }
 
+const (
+	LocationQuery = "query"
+	LocationForm  = "form"
+	LocationJSON  = "json"
+)
+
+type Candidate struct {
+	Name       string
+	Location   string
+	JSONParent string
+}
+
+func (c Candidate) JSONPath() string {
+	if c.Location != LocationJSON {
+		return ""
+	}
+	if c.JSONParent == "" || c.JSONParent == "$" {
+		return "$." + c.Name
+	}
+	return c.JSONParent + "." + c.Name
+}
+
+type ProbeValue struct {
+	Kind string
+	Raw  string
+}
+
+func StringValue(v string) ProbeValue { return ProbeValue{Kind: "string", Raw: v} }
+func BoolValue(v bool) ProbeValue {
+	if v {
+		return ProbeValue{Kind: "boolean", Raw: "true"}
+	}
+	return ProbeValue{Kind: "boolean", Raw: "false"}
+}
+func IntegerValue(v int) ProbeValue { return ProbeValue{Kind: "integer", Raw: strconv.Itoa(v)} }
+func NullValue() ProbeValue         { return ProbeValue{Kind: "null", Raw: "null"} }
+
+type Mutation struct {
+	Candidate Candidate
+	Value     ProbeValue
+}
+
+type ValueObservation struct {
+	Value          string       `json:"value"`
+	ValueKind      string       `json:"value_kind"`
+	Status         int          `json:"status"`
+	Classification string       `json:"classification"`
+	Evidence       []Difference `json:"evidence,omitempty"`
+}
+
 type ParameterResult struct {
-	Name                 string          `json:"name"`
-	Location             string          `json:"location"`
-	Confidence           ConfidenceScore `json:"confidence"`
-	ConfidenceLabel      string          `json:"confidence_label"`
-	CandidateChanged     int             `json:"candidate_changed"`
-	CandidateTrials      int             `json:"candidate_trials"`
-	RandomControlChanged int             `json:"random_control_changed"`
-	RandomControlTrials  int             `json:"random_control_trials"`
-	Evidence             []Difference    `json:"evidence,omitempty"`
+	Name                 string             `json:"name"`
+	Location             string             `json:"location"`
+	JSONPath             string             `json:"json_path,omitempty"`
+	Confidence           ConfidenceScore    `json:"confidence"`
+	ConfidenceLabel      string             `json:"confidence_label"`
+	CandidateChanged     int                `json:"candidate_changed"`
+	CandidateTrials      int                `json:"candidate_trials"`
+	RandomControlChanged int                `json:"random_control_changed"`
+	RandomControlTrials  int                `json:"random_control_trials"`
+	Evidence             []Difference       `json:"evidence,omitempty"`
+	InferredType         string             `json:"inferred_type,omitempty"`
+	TypeConfidence       *ConfidenceScore   `json:"type_confidence,omitempty"`
+	TypeEvidence         string             `json:"type_evidence,omitempty"`
+	ValueProfile         []ValueObservation `json:"value_profile,omitempty"`
 }
 
 type ScanReport struct {
+	Version    string            `json:"version"`
 	Target     string            `json:"target"`
 	Method     string            `json:"method"`
 	Baseline   BaselineSummary   `json:"baseline"`
