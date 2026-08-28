@@ -18,14 +18,14 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
 
-const version = "0.3.0"
+const version = "0.4.0"
 
 func main() {
 	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath string
-	var baselineN, chunk, trials, jsonDepth int
+	var baselineN, chunk, trials, jsonDepth, valueAwareBudget int
 	var timeout time.Duration
 	var minConf float64
-	var verbose, characterize, allowStateChanging, showVersion bool
+	var verbose, characterize, valueAware, allowStateChanging, showVersion bool
 	flag.StringVar(&reqPath, "request", "", "raw HTTP request file (required)")
 	flag.StringVar(&wordPath, "wordlist", "", "optional parameter wordlist")
 	flag.StringVar(&contextResponsePath, "context-response", "", "optional related raw HTTP response or JSON body used to derive high-signal JSON candidates")
@@ -36,10 +36,12 @@ func main() {
 	flag.IntVar(&chunk, "chunk", 64, "initial batch size")
 	flag.IntVar(&trials, "trials", 3, "verification and negative-control trials")
 	flag.IntVar(&jsonDepth, "json-depth", 3, "maximum nested JSON object depth to probe")
+	flag.IntVar(&valueAwareBudget, "value-aware-budget", 64, "maximum additional requests used by value-aware rescue")
 	flag.Float64Var(&minConf, "min-confidence", 0.60, "minimum confidence to report")
 	flag.DurationVar(&timeout, "timeout", 15*time.Second, "per-request timeout")
 	flag.BoolVar(&verbose, "verbose", false, "show candidate verification and rejection diagnostics")
 	flag.BoolVar(&characterize, "characterize", true, "profile likely values and infer parameter types after discovery")
+	flag.BoolVar(&valueAware, "value-aware", true, "rescue value-sensitive parameters with bounded semantic probes")
 	flag.BoolVar(&allowStateChanging, "allow-state-changing", false, "allow repeated probing of POST/PUT/PATCH/DELETE requests after confirming authorization and side-effect risk")
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.Parse()
@@ -50,6 +52,9 @@ func main() {
 	if reqPath == "" {
 		fmt.Fprintln(os.Stderr, "error: -request is required")
 		os.Exit(2)
+	}
+	if valueAwareBudget < 0 {
+		fatal(fmt.Errorf("-value-aware-budget must be 0 or greater"))
 	}
 	locations, err := parseLocations(locationSpec)
 	fatal(err)
@@ -91,14 +96,16 @@ func main() {
 		fmt.Printf("    stable JSON paths: %d\n", len(profile.StableJSONPaths))
 	}
 	engine := discovery.Engine{Client: client, Config: discovery.Config{
-		ChunkSize:     chunk,
-		Trials:        trials,
-		MinConfidence: minConf,
-		Verbose:       verbose,
-		Logf:          func(format string, args ...any) { fmt.Printf(format, args...) },
-		Locations:     locations,
-		MaxJSONDepth:  jsonDepth,
-		Characterize:  characterize,
+		ChunkSize:        chunk,
+		Trials:           trials,
+		MinConfidence:    minConf,
+		Verbose:          verbose,
+		Logf:             func(format string, args ...any) { fmt.Printf(format, args...) },
+		Locations:        locations,
+		MaxJSONDepth:     jsonDepth,
+		Characterize:     characterize,
+		ValueAware:       valueAware,
+		ValueAwareBudget: valueAwareBudget,
 	}}
 	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
 	fatal(err)
