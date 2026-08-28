@@ -1,5 +1,5 @@
 ParamIntel v0.3.0 verification
-Date: 2026-08-27
+Date: 2026-08-28
 
 Automated checks completed on the v0.3 implementation head:
 - go test ./...: PASS
@@ -10,6 +10,14 @@ Automated checks completed on the v0.3 implementation head:
 - GitHub Actions full matrix: PASS
 - CLI version updated to ParamIntel v0.3.0
 - v0.2 state-changing-method safety guard remains in place
+
+Independent pre-merge review hardening:
+- removed the fixed a1b2c3d4 token fallback
+- probe/control tokens now use 8 random bytes (16 hexadecimal characters)
+- token generation fails closed and propagates an error when secure entropy is unavailable
+- regression coverage injects a failing entropy reader and requires an explicit error
+- confidence scoring is documented as a deterministic evidence-ranking heuristic, not a calibrated probability or significance estimate
+- README surfaces default -locations auto behavior near the introduction
 
 Key v0.3 regression/integration coverage:
 - a related raw HTTP response can be parsed for a JSON object body
@@ -35,10 +43,41 @@ Preserved v0.2 coverage:
 - conservative type inference and typed value profiling
 - arrays remain excluded from JSON insertion semantics
 
-External validation status:
-- v0.2 was manually validated against PortSwigger labs for GraphQL query discovery and mass-assignment root/nested JSON discovery.
-- v0.3's new contextual no-wordlist workflow is covered by an in-process httptest integration test modeled on the same mass-assignment behavior.
-- Manual external v0.3 acceptance remains to be run with the real related checkout response and chosen_discount removed from the wordlist before merging to main.
+Manual external v0.3 validation — PortSwigger Web Security Academy mass-assignment lab:
+
+1. Positive contextual no-wordlist acceptance: PASS
+- original POST /api/checkout request contained chosen_products but did not contain chosen_discount
+- related checkout response exposed chosen_discount as an object with nested percentage
+- no custom wordlist supplied chosen_discount
+- context intelligence observed 3 JSON properties
+- actionable response-only candidates: 1
+- skipped already-present properties: 1
+- skipped candidates with missing request parent: 1
+- $.chosen_discount was prioritized as a contextual JSON candidate
+- candidate behavior changed 3/3 trials
+- paired random-name control changed 0/3 trials
+- confidence: 100% HIGH
+- evidence included body_changed and status 201 -> 400
+- finding provenance recorded source=context_response_only_json_property, path=$.chosen_discount, observed_type=object, priority=100
+- final report contained exactly 1 parameter
+- runtime was approximately 2.58 seconds in the manual Windows PowerShell run
+
+2. Synthetic contextual false-lead rejection: PASS
+- a copy of the related response was modified to add top-level definitely_fake_paramintel_field=true
+- context intelligence observed 4 JSON properties
+- actionable response-only candidates: 2
+- skipped already-present properties: 1
+- skipped candidates with missing request parent: 1
+- both the real field and synthetic field were eligible contextual candidates
+- $.chosen_discount still passed with 3/3 candidate changes, 0/3 control changes, and 100% HIGH confidence
+- definitely_fake_paramintel_field was not promoted to a finding
+- final report still contained exactly 1 parameter: chosen_discount
+- runtime was approximately 2.94 seconds in the manual Windows PowerShell run
+
+External validation conclusion:
+- v0.3 can learn a real application-specific field from a related API response without receiving that field from a wordlist, then independently verify it with the existing negative-control model.
+- merely appearing in a context response is not sufficient for a finding; a synthetic response-only field was considered as a candidate but rejected by behavioral discovery/verification.
+- the real contextual workflow and its negative-control boundary are both validated externally.
 
 Scope boundary:
 - v0.3 does not scrape arbitrary response words, synthesize missing JSON object scaffolding, traverse arrays for insertion, add Burp/MCP/AI integrations, or change the core verifier/scoring model.
