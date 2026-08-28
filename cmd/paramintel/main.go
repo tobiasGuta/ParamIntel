@@ -58,9 +58,7 @@ func main() {
 	if valueAwareBudget < 0 {
 		fatal(fmt.Errorf("-value-aware-budget must be 0 or greater"))
 	}
-	if delay < 0 {
-		fatal(fmt.Errorf("-delay must be 0 or greater"))
-	}
+	fatal(validateDelay(delay))
 	locations, err := parseLocations(locationSpec)
 	fatal(err)
 	raw, err := os.ReadFile(reqPath)
@@ -131,6 +129,13 @@ func main() {
 		return
 	}
 	_, _ = os.Stdout.Write(b)
+}
+
+func validateDelay(delay time.Duration) error {
+	if delay < 0 {
+		return fmt.Errorf("-delay must be 0 or greater")
+	}
+	return nil
 }
 
 func parseLocations(spec string) ([]string, error) {
