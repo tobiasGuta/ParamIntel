@@ -135,3 +135,45 @@ func TestScanValueAwareNeverCrossesInsufficientBudget(t *testing.T) {
 		t.Fatalf("missing exhaustion diagnostic: %s", logs.String())
 	}
 }
+
+func TestScanValueAwareBudgetOrderingIsDeterministic(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]any{"status": "baseline"}
+		q := r.URL.Query()
+		if q.Get("debug") == "true" {
+			resp["debug"] = true
+		}
+		if q.Get("preview") == "true" {
+			resp["preview"] = true
+		}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	tmpl := model.RequestTemplate{Method: http.MethodGet, URL: srv.URL + "/api/ordered", Headers: make(http.Header)}
+	profile, err := baseline.Build(context.Background(), srv.Client(), tmpl, 5)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for run := 0; run < 2; run++ {
+		engine := Engine{Client: srv.Client(), Config: Config{
+			ChunkSize:        4,
+			Trials:           3,
+			MinConfidence:    .60,
+			Locations:        []string{model.LocationQuery},
+			ValueAware:       true,
+			ValueAwareBudget: 8,
+		}}
+		results, err := engine.Scan(context.Background(), tmpl, profile, []string{"debug", "preview"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(results) != 1 || results[0].Name != "debug" {
+			t.Fatalf("run %d results=%+v; budget ordering must consistently confirm debug first", run, results)
+		}
+	}
+}
