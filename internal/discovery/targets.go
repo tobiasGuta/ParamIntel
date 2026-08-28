@@ -145,7 +145,11 @@ func (e Engine) narrow(ctx context.Context, tmpl model.RequestTemplate, p model.
 }
 
 func (e Engine) groupInteresting(ctx context.Context, tmpl model.RequestTemplate, p model.BaselineProfile, group []model.Candidate) (bool, error) {
-	value := model.StringValue(token())
+	probeToken, err := token()
+	if err != nil {
+		return false, err
+	}
+	value := model.StringValue(probeToken)
 	mutations := make([]model.Mutation, 0, len(group))
 	for _, candidate := range group {
 		mutations = append(mutations, model.Mutation{Candidate: candidate, Value: value})
