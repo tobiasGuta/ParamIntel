@@ -10,7 +10,11 @@ import (
 )
 
 func (e Engine) characterize(ctx context.Context, tmpl model.RequestTemplate, p model.BaselineProfile, candidate model.Candidate, result *model.ParameterResult) error {
-	generic, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{{Candidate: candidate, Value: model.StringValue(token())}})
+	probeToken, err := token()
+	if err != nil {
+		return err
+	}
+	generic, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{{Candidate: candidate, Value: model.StringValue(probeToken)}})
 	if err != nil {
 		return err
 	}
