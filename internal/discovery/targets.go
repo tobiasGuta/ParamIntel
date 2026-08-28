@@ -91,7 +91,13 @@ func groupTargets(targets []model.Candidate, chunkSize int) [][]model.Candidate 
 	byPlacement := map[string][]model.Candidate{}
 	var order []string
 	for _, c := range targets {
-		placement := c.Location + "|" + c.JSONParent
+		tier := "generic"
+		if len(c.Sources) > 0 {
+			tier = "context"
+		}
+		// Keep contextual candidates in their own first-pass groups rather than
+		// mixing them into a generic dictionary batch at the same placement.
+		placement := tier + "|" + c.Location + "|" + c.JSONParent
 		if _, ok := byPlacement[placement]; !ok {
 			order = append(order, placement)
 		}
