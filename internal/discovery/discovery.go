@@ -8,17 +8,20 @@ import (
 	"strings"
 
 	"github.com/tobiasGuta/ParamIntel/internal/model"
+	"github.com/tobiasGuta/ParamIntel/internal/semantics"
 )
 
 type Config struct {
-	ChunkSize     int
-	Trials        int
-	MinConfidence float64
-	Verbose       bool
-	Logf          func(format string, args ...any)
-	Locations     []string
-	MaxJSONDepth  int
-	Characterize  bool
+	ChunkSize        int
+	Trials           int
+	MinConfidence    float64
+	Verbose          bool
+	Logf             func(format string, args ...any)
+	Locations        []string
+	MaxJSONDepth     int
+	Characterize     bool
+	ValueAware       bool
+	ValueAwareBudget int
 }
 
 type Engine struct {
@@ -30,8 +33,9 @@ func (e Engine) Scan(ctx context.Context, tmpl model.RequestTemplate, profile mo
 	return e.ScanWithCandidates(ctx, tmpl, profile, words, nil)
 }
 
-// ScanWithCandidates preserves the v0.2 discovery/verifier pipeline while
-// allowing high-signal, exact candidate placements to be tested first.
+// ScanWithCandidates preserves the v0.2/v0.3 discovery/verifier pipeline while
+// allowing high-signal, exact candidate placements to be tested first and an
+// optional bounded value-aware rescue pass to recover clean semantic misses.
 func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTemplate, profile model.BaselineProfile, words []string, seeded []model.Candidate) ([]model.ParameterResult, error) {
 	cfg := e.Config
 	if cfg.ChunkSize <= 0 {
@@ -45,6 +49,9 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 	}
 	if cfg.MaxJSONDepth <= 0 {
 		cfg.MaxJSONDepth = 3
+	}
+	if cfg.ValueAwareBudget < 0 {
+		cfg.ValueAwareBudget = 0
 	}
 
 	targets, err := buildTargetsWithSeeds(tmpl, words, cfg.Locations, cfg.MaxJSONDepth, seeded)
@@ -74,20 +81,28 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 		survivors = append(survivors, found...)
 	}
 
-	seen := map[string]struct{}{}
+	genericAttempted := map[string]struct{}{}
+	accepted := map[string]struct{}{}
+	rescueExcluded := map[string]struct{}{}
 	results := make([]model.ParameterResult, 0)
 	for _, candidate := range survivors {
 		key := candidateKey(candidate)
-		if _, ok := seen[key]; ok {
+		if _, ok := genericAttempted[key]; ok {
 			continue
 		}
-		seen[key] = struct{}{}
+		genericAttempted[key] = struct{}{}
 		r, err := e.verify(ctx, tmpl, profile, candidate, cfg.Trials)
 		if err != nil {
 			return nil, err
 		}
 		if float64(r.Confidence) < cfg.MinConfidence {
 			e.logVerification(r, false, cfg.MinConfidence)
+			// Semantic rescue is deliberately conservative. If generic probing
+			// produced any candidate or control activity, do not reinterpret it
+			// using additional values. Only clean 0/0 misses can be rescued.
+			if r.CandidateChanged > 0 || r.RandomControlChanged > 0 {
+				rescueExcluded[key] = struct{}{}
+			}
 			continue
 		}
 		if cfg.Characterize {
@@ -97,6 +112,70 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 		}
 		e.logVerification(r, true, cfg.MinConfidence)
 		results = append(results, r)
+		accepted[key] = struct{}{}
+	}
+
+	if cfg.ValueAware && cfg.ValueAwareBudget > 0 {
+		eligible := 0
+		for _, candidate := range targets {
+			key := candidateKey(candidate)
+			if _, ok := accepted[key]; ok {
+				continue
+			}
+			if _, ok := rescueExcluded[key]; ok {
+				continue
+			}
+			if len(semantics.ProfileValues(candidate.Name, candidate.Location)) == 0 {
+				continue
+			}
+			eligible++
+		}
+
+		budget := newSemanticBudget(cfg.ValueAwareBudget)
+		e.verbosef("[*] Value-aware rescue\n")
+		e.verbosef("    eligible candidates: %d\n", eligible)
+		e.verbosef("    semantic probe budget: %d requests\n", cfg.ValueAwareBudget)
+
+		for _, candidate := range targets {
+			if budget.exhausted {
+				break
+			}
+			key := candidateKey(candidate)
+			if _, ok := accepted[key]; ok {
+				continue
+			}
+			if _, ok := rescueExcluded[key]; ok {
+				continue
+			}
+			if len(semantics.ProfileValues(candidate.Name, candidate.Location)) == 0 {
+				continue
+			}
+
+			r, value, ok, err := e.semanticRescueCandidateBudgeted(ctx, tmpl, profile, candidate, cfg.Trials, cfg.MinConfidence, budget)
+			if err != nil {
+				return nil, err
+			}
+			if !ok {
+				continue
+			}
+			r.DiscoveryMode = "value_aware"
+			r.DiscoveryValue = value.Raw
+			r.DiscoveryValueKind = value.Kind
+			if cfg.Characterize {
+				if err := e.characterize(ctx, tmpl, profile, candidate, &r); err != nil {
+					return nil, err
+				}
+			}
+			e.logVerification(r, true, cfg.MinConfidence)
+			results = append(results, r)
+			accepted[key] = struct{}{}
+		}
+
+		if budget.exhausted {
+			e.verbosef("    semantic probe budget exhausted: %d/%d requests used\n", budget.used, cfg.ValueAwareBudget)
+		} else {
+			e.verbosef("    semantic requests used: %d/%d\n", budget.used, cfg.ValueAwareBudget)
+		}
 	}
 
 	sort.Slice(results, func(i, j int) bool {
@@ -133,6 +212,9 @@ func (e Engine) logVerification(r model.ParameterResult, accepted bool, minConfi
 			e.verbosef(" (observed %s)", source.ObservedType)
 		}
 		e.verbosef("\n")
+	}
+	if r.DiscoveryMode == "value_aware" {
+		e.verbosef("    discovery: value-aware using %q (%s)\n", r.DiscoveryValue, r.DiscoveryValueKind)
 	}
 	e.verbosef("    candidate: changed %d/%d\n", r.CandidateChanged, r.CandidateTrials)
 	e.verbosef("    control:   changed %d/%d\n", r.RandomControlChanged, r.RandomControlTrials)
