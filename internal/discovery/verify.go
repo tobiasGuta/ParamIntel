@@ -31,6 +31,7 @@ func (e Engine) verify(ctx context.Context, tmpl model.RequestTemplate, p model.
 
 		control := candidate
 		control.Name = "zz_pi_" + token()
+		control.Sources = nil
 		cs, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{{Candidate: control, Value: value}})
 		if err != nil {
 			return model.ParameterResult{}, err
@@ -57,6 +58,7 @@ func (e Engine) verify(ctx context.Context, tmpl model.RequestTemplate, p model.
 		Name:                 candidate.Name,
 		Location:             candidate.Location,
 		JSONPath:             candidate.JSONPath(),
+		CandidateSources:     append([]model.CandidateSource(nil), candidate.Sources...),
 		Confidence:           model.ConfidenceScore(score),
 		ConfidenceLabel:      confidence.Label(score),
 		CandidateChanged:     candChanged,
