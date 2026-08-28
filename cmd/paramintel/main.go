@@ -14,6 +14,7 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/candidates"
 	"github.com/tobiasGuta/ParamIntel/internal/contextintel"
 	"github.com/tobiasGuta/ParamIntel/internal/discovery"
+	"github.com/tobiasGuta/ParamIntel/internal/httppolicy"
 	"github.com/tobiasGuta/ParamIntel/internal/httpraw"
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
@@ -23,7 +24,7 @@ const version = "0.4.0"
 func main() {
 	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath string
 	var baselineN, chunk, trials, jsonDepth, valueAwareBudget int
-	var timeout time.Duration
+	var timeout, delay time.Duration
 	var minConf float64
 	var verbose, characterize, valueAware, allowStateChanging, showVersion bool
 	flag.StringVar(&reqPath, "request", "", "raw HTTP request file (required)")
@@ -39,6 +40,7 @@ func main() {
 	flag.IntVar(&valueAwareBudget, "value-aware-budget", 64, "maximum additional requests used by value-aware rescue")
 	flag.Float64Var(&minConf, "min-confidence", 0.60, "minimum confidence to report")
 	flag.DurationVar(&timeout, "timeout", 15*time.Second, "per-request timeout")
+	flag.DurationVar(&delay, "delay", 0, "minimum delay between outbound request starts")
 	flag.BoolVar(&verbose, "verbose", false, "show candidate verification and rejection diagnostics")
 	flag.BoolVar(&characterize, "characterize", true, "profile likely values and infer parameter types after discovery")
 	flag.BoolVar(&valueAware, "value-aware", true, "rescue value-sensitive parameters with bounded semantic probes")
@@ -55,6 +57,9 @@ func main() {
 	}
 	if valueAwareBudget < 0 {
 		fatal(fmt.Errorf("-value-aware-budget must be 0 or greater"))
+	}
+	if delay < 0 {
+		fatal(fmt.Errorf("-delay must be 0 or greater"))
 	}
 	locations, err := parseLocations(locationSpec)
 	fatal(err)
@@ -84,7 +89,11 @@ func main() {
 		}
 	}
 
-	client := &http.Client{Timeout: timeout, CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+	client := &http.Client{
+		Timeout:       timeout,
+		Transport:     httppolicy.NewPacedTransport(http.DefaultTransport, delay),
+		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+	}
 	ctx := context.Background()
 	profile, err := baseline.Build(ctx, client, tmpl, baselineN)
 	fatal(err)
@@ -94,6 +103,9 @@ func main() {
 		fmt.Printf("    status: %d (stable=%t)\n", profile.StatusCode, profile.StatusStable)
 		fmt.Printf("    body length: %d-%d bytes\n", profile.BodyLenMin, profile.BodyLenMax)
 		fmt.Printf("    stable JSON paths: %d\n", len(profile.StableJSONPaths))
+		if delay > 0 {
+			fmt.Printf("[*] Request pacing: minimum %s between request starts\n", delay)
+		}
 	}
 	engine := discovery.Engine{Client: client, Config: discovery.Config{
 		ChunkSize:        chunk,
