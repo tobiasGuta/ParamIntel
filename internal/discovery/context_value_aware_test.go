@@ -38,7 +38,7 @@ func TestContextCandidateComposesWithValueAwareJSONDiscovery(t *testing.T) {
 		Method:  http.MethodPost,
 		URL:     srv.URL + "/api/items",
 		Headers: http.Header{"Content-Type": []string{"application/json"}},
-		Body:    []byte(`{"options":{"page_size":10}}`),
+		Body:    []byte(`{"options":{"page_size":10},"items":[]}`),
 	}
 	contextResponse := []byte(`{"options":{"page_size":10,"include_deleted":false},"items":[]}`)
 	intel, err := contextintel.HarvestJSONResponse(tmpl.Body, contextResponse, 3)
