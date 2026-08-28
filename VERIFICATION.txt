@@ -1,83 +1,111 @@
-ParamIntel v0.3.0 verification
+ParamIntel v0.4.0 verification
 Date: 2026-08-28
 
-Automated checks completed on the v0.3 implementation head:
+Automated checks completed on the v0.4 implementation branch:
 - go test ./...: PASS
 - go vet ./...: PASS
 - go test -race ./...: PASS
 - Linux amd64 build: PASS
 - Windows amd64 cross-build: PASS
 - GitHub Actions full matrix: PASS
-- CLI version updated to ParamIntel v0.3.0
+- CLI version updated to ParamIntel v0.4.0
 - v0.2 state-changing-method safety guard remains in place
 
-Independent pre-merge review hardening:
-- removed the fixed a1b2c3d4 token fallback
-- probe/control tokens now use 8 random bytes (16 hexadecimal characters)
-- token generation fails closed and propagates an error when secure entropy is unavailable
-- regression coverage injects a failing entropy reader and requires an explicit error
-- confidence scoring is documented as a deterministic evidence-ranking heuristic, not a calibrated probability or significance estimate
-- README surfaces default -locations auto behavior near the introduction
+Core v0.4 behavior:
+- existing random-string batch/narrow discovery remains the first-pass detector
+- value-aware discovery is a bounded rescue pass for clean generic misses
+- semantic candidate probes are paired with same-value random-name controls
+- candidate/control value kind and value remain identical; only the parameter name changes
+- evidence from different semantic values is never pooled
+- repeated explicit-value verification still uses the standard confidence model
+- -value-aware defaults to true
+- -value-aware-budget defaults to 64 additional requests
+- the semantic budget reserves complete repeated-verification cost before confirmation begins
+- the semantic budget never exceeds the configured cap
+- exact final budget consumption is reported as exhausted
+- candidates with generic candidate/control activity are not reinterpreted by semantic rescue; only clean misses are eligible
+- -characterize=false does not disable value-aware discovery
+- findings record discovery_mode, discovery_value, and discovery_value_kind
 
-Key v0.3 regression/integration coverage:
-- a related raw HTTP response can be parsed for a JSON object body
-- a bare JSON body can be used directly as context
-- request-versus-response structural comparison excludes properties already present in the request
-- response string values are never tokenized into candidate names
-- response-only root properties become exact JSON candidates when the root request object is available
-- response-only nested properties become exact JSON candidates only when their parent request object already exists
-- nested response fields with missing request parents are observed but deliberately not made actionable
-- contextual candidate ordering is deterministic
-- contextual candidates are tested in first-pass groups before generic dictionary candidates
-- a generic duplicate cannot erase contextual candidate provenance
-- findings retain context source path, observed JSON type, and priority
-- mass-assignment-style acceptance test discovers $.chosen_discount from response context even though chosen_discount is absent from the supplied generic wordlist
-- the contextual candidate still passes the standard verifier: repeated candidate behavior, paired random-name controls, and confidence scoring are unchanged
+Key v0.4 regression/integration coverage:
+- v0.3-style generic verification misses a controlled debug parameter when only debug=true has behavior
+- value-aware rescue discovers debug using true
+- debug=true changes 3/3 repeated candidate trials while the same-value random-name control changes 0/3
+- generic behavior caused by any parameter name is rejected because the same-value random-name control reproduces it
+- an insufficient semantic budget does not start partial repeated verification
+- deterministic ordering is preserved when the budget can confirm only the first of multiple semantic candidates
+- query value-aware discovery records string value provenance
+- JSON semantic discovery sends real boolean/integer JSON types rather than string approximations
+- a nested context-derived candidate can retain context provenance and also be discovered value-aware
+- nested $.options.include_deleted preserves source=context_response_only_json_property and observed_type=boolean
+- $.options.include_deleted is rescued using typed JSON boolean true
+- context observation alone still does not create a finding
 
-Preserved v0.2 coverage:
-- GraphQL-style hidden query discovery
+Preserved v0.3/v0.2 coverage:
+- related-response JSON candidate intelligence
+- request-versus-response structural comparison
+- contextual candidate prioritization and provenance
+- PortSwigger mass-assignment-style $.chosen_discount regression
+- synthetic contextual false-lead rejection
+- GraphQL-style hidden query verification
 - form-body parameter discovery
 - root and nested JSON discovery
 - JSON-shaped request bodies under non-JSON MIME types such as text/plain
-- negative-control rejection for generic unknown-parameter behavior
-- conservative type inference and typed value profiling
+- paired random-name negative-control rejection
+- multi-request baseline stability filtering
+- conservative type inference and optional value characterization
+- secure entropy generation and fail-closed token errors
 - arrays remain excluded from JSON insertion semantics
 
-Manual external v0.3 validation — PortSwigger Web Security Academy mass-assignment lab:
+Manual Windows external acceptance — value-sensitive query parameter:
 
-1. Positive contextual no-wordlist acceptance: PASS
-- original POST /api/checkout request contained chosen_products but did not contain chosen_discount
-- related checkout response exposed chosen_discount as an object with nested percentage
-- no custom wordlist supplied chosen_discount
-- context intelligence observed 3 JSON properties
-- actionable response-only candidates: 1
-- skipped already-present properties: 1
-- skipped candidates with missing request parent: 1
-- $.chosen_discount was prioritized as a contextual JSON candidate
-- candidate behavior changed 3/3 trials
-- paired random-name control changed 0/3 trials
-- confidence: 100% HIGH
-- evidence included body_changed and status 201 -> 400
-- finding provenance recorded source=context_response_only_json_property, path=$.chosen_discount, observed_type=object, priority=100
-- final report contained exactly 1 parameter
-- runtime was approximately 2.58 seconds in the manual Windows PowerShell run
+Controlled endpoint behavior:
+- GET /api/users -> baseline JSON
+- GET /api/users?debug=<arbitrary-string> -> baseline JSON
+- GET /api/users?debug=true -> stable debug object added
+- GET /api/users?<random-name>=true -> baseline JSON
 
-2. Synthetic contextual false-lead rejection: PASS
-- a copy of the related response was modified to add top-level definitely_fake_paramintel_field=true
-- context intelligence observed 4 JSON properties
-- actionable response-only candidates: 2
-- skipped already-present properties: 1
-- skipped candidates with missing request parent: 1
-- both the real field and synthetic field were eligible contextual candidates
-- $.chosen_discount still passed with 3/3 candidate changes, 0/3 control changes, and 100% HIGH confidence
-- definitely_fake_paramintel_field was not promoted to a finding
-- final report still contained exactly 1 parameter: chosen_discount
-- runtime was approximately 2.94 seconds in the manual Windows PowerShell run
+v0.3 result on the same endpoint:
+- baseline: 5 samples
+- status 200 stable
+- body length 26-26 bytes
+- stable JSON paths: 4
+- 26 query candidate placements tested
+- final report: 0 parameters
 
-External validation conclusion:
-- v0.3 can learn a real application-specific field from a related API response without receiving that field from a wordlist, then independently verify it with the existing negative-control model.
-- merely appearing in a context response is not sufficient for a finding; a synthetic response-only field was considered as a candidate but rejected by behavioral discovery/verification.
-- the real contextual workflow and its negative-control boundary are both validated externally.
+v0.4 result on the same endpoint:
+- baseline: 5 samples
+- status 200 stable
+- body length 26-26 bytes
+- stable JSON paths: 4
+- 26 query candidate placements tested
+- value-aware eligible candidates: 17
+- semantic probe budget: 64 requests
+- debug discovered with discovery_mode=value_aware
+- discovery_value=true
+- discovery_value_kind=string
+- candidate behavior changed 3/3
+- paired same-value random-name control changed 0/3
+- confidence: 1.00 HIGH
+- final report contained exactly 1 parameter: debug
+- evidence included $.debug.__keys, $.debug.cache, $.debug.database_ms, and the root key-set change
+- -characterize=false was used, confirming value-aware discovery is independent of characterization
+- the semantic request budget reached exactly 64/64 and did not exceed the configured cap
+
+Manual acceptance conclusion:
+- v0.4 fixes the demonstrated probe-value-selection false negative without changing the candidate list, placement model, confidence threshold, or negative-control philosophy.
+- the improvement comes from trying bounded semantic values earlier in discovery, not from weakening verification.
+
+Request-efficiency review:
+- the default 64-request semantic cap can be fully consumed even with a modest candidate set
+- no semantic profile values were removed solely to reduce request count because that would reduce recall for applications accepting only one representation such as true/false/1/0
+- bounded request cost remains controlled by the global semantic budget pending future evidence for safer optimization
+
+Known benchmark boundaries retained from pre-v0.4 testing:
+- hidden GraphQL query default acquisition miss is a candidate-acquisition limitation, not a verifier failure
+- server-side parameter pollution inside another parameter value remains outside the current query/form/JSON placement model
+- shared intermediary caching can violate probe independence and requires separate cache-aware design rather than ad hoc changes in v0.4
 
 Scope boundary:
-- v0.3 does not scrape arbitrary response words, synthesize missing JSON object scaffolding, traverse arrays for insertion, add Burp/MCP/AI integrations, or change the core verifier/scoring model.
+- v0.4 does not add cache-awareness, server-side parameter-pollution mutation, missing-parent JSON scaffolding synthesis, array insertion, AI-generated values, Burp/MCP integration, or broad business-state enum spraying.
+- ParamIntel findings remain research leads requiring manual authorization, impact, and exploitability validation.
