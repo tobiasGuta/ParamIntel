@@ -12,21 +12,23 @@ import (
 
 	"github.com/tobiasGuta/ParamIntel/internal/baseline"
 	"github.com/tobiasGuta/ParamIntel/internal/candidates"
+	"github.com/tobiasGuta/ParamIntel/internal/contextintel"
 	"github.com/tobiasGuta/ParamIntel/internal/discovery"
 	"github.com/tobiasGuta/ParamIntel/internal/httpraw"
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
 
-const version = "0.2.0"
+const version = "0.3.0"
 
 func main() {
-	var reqPath, wordPath, outPath, scheme, locationSpec string
+	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath string
 	var baselineN, chunk, trials, jsonDepth int
 	var timeout time.Duration
 	var minConf float64
 	var verbose, characterize, allowStateChanging, showVersion bool
 	flag.StringVar(&reqPath, "request", "", "raw HTTP request file (required)")
 	flag.StringVar(&wordPath, "wordlist", "", "optional parameter wordlist")
+	flag.StringVar(&contextResponsePath, "context-response", "", "optional related raw HTTP response or JSON body used to derive high-signal JSON candidates")
 	flag.StringVar(&outPath, "output", "", "JSON output path; stdout if empty")
 	flag.StringVar(&scheme, "scheme", "https", "scheme for relative raw requests: http or https")
 	flag.StringVar(&locationSpec, "locations", "auto", "discovery locations: auto or comma-separated query,form,json")
@@ -60,6 +62,23 @@ func main() {
 	}
 	words, err := candidates.Load(wordPath)
 	fatal(err)
+
+	var seeded []model.Candidate
+	if contextResponsePath != "" {
+		contextRaw, err := os.ReadFile(contextResponsePath)
+		fatal(err)
+		contextReport, err := contextintel.HarvestJSONResponse(tmpl.Body, contextRaw, jsonDepth)
+		fatal(err)
+		seeded = contextReport.Actionable
+		if verbose {
+			fmt.Printf("[*] Context response intelligence\n")
+			fmt.Printf("    observed JSON properties: %d\n", contextReport.ObservedProperties)
+			fmt.Printf("    actionable response-only candidates: %d\n", len(contextReport.Actionable))
+			fmt.Printf("    skipped already-present properties: %d\n", contextReport.SkippedExisting)
+			fmt.Printf("    skipped candidates with missing request parent: %d\n", contextReport.SkippedNoParent)
+		}
+	}
+
 	client := &http.Client{Timeout: timeout, CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
 	ctx := context.Background()
 	profile, err := baseline.Build(ctx, client, tmpl, baselineN)
@@ -81,7 +100,7 @@ func main() {
 		MaxJSONDepth:  jsonDepth,
 		Characterize:  characterize,
 	}}
-	params, err := engine.Scan(ctx, tmpl, profile, words)
+	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
 	fatal(err)
 	report := model.ScanReport{Version: version, Target: tmpl.URL, Method: tmpl.Method, Baseline: model.BaselineSummary{Samples: profile.Samples, StableJSONPaths: len(profile.StableJSONPaths), BodyLenMin: profile.BodyLenMin, BodyLenMax: profile.BodyLenMax}, Parameters: params}
 	b, err := json.MarshalIndent(report, "", "  ")
