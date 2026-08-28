@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.5.0
+
+- Added evidence-integrity protection for definite rate-limit/backoff responses before they can become behavioral snapshots.
+- HTTP `429 Too Many Requests` now produces a typed `BackoffError` and is never passed to the comparator as discovery evidence.
+- HTTP `503 Service Unavailable` is treated as server backoff only when accompanied by a valid `Retry-After` value; ordinary 503 responses remain available to normal comparison.
+- Added `Retry-After` parsing for both non-negative integer seconds and HTTP-date values while preserving malformed raw values for diagnostics.
+- Added explicit fail-closed behavior during baseline construction: any classified rate-limit/backoff response invalidates the baseline and aborts the scan.
+- Added discovery-phase integrity regressions proving group probes, candidate probes, random-name controls, value-aware screens, semantic controls, and characterization cannot turn known limiter behavior into confidence or findings.
+- Added a real CLI regression proving a rate-limit abort exits non-zero, explains that the response was not used as discovery evidence, and does not write a normal findings report.
+- Added `-delay` as a global minimum interval between outbound request starts. The default remains `0`, preserving existing scan speed unless pacing is explicitly requested.
+- Request pacing is applied once at the shared HTTP transport, so baseline, group probing, verification, controls, value-aware rescue, and characterization all follow the same policy without changing discovery algorithms.
+- Pacing is context-cancellable, race-safe, and based on request-start spacing rather than unconditional sleep after every response.
+- Negative `-delay` values are rejected before network activity.
+- Automatic retry/wait-on-`Retry-After` is intentionally not included in v0.5.0, especially for potentially state-changing methods.
+- Added a reproducible Windows acceptance lab covering mid-scan 429 aborts, asymmetric candidate/control rate limiting, and `-delay` pacing.
+- Release version updated to `ParamIntel v0.5.0`.
+- Automated release gates are complete; external Windows acceptance remains required before the v0.5 pull request is considered ready to merge.
+
 ## v0.4.0
 
 - Added bounded value-aware discovery for parameters whose behavior only appears for specific semantic values such as `debug=true`.
