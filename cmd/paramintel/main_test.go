@@ -3,6 +3,7 @@ package main
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestParseLocations(t *testing.T) {
@@ -29,5 +30,16 @@ func TestMethodMayChangeState(t *testing.T) {
 		if !methodMayChangeState(method) {
 			t.Fatalf("%s should require explicit opt-in", method)
 		}
+	}
+}
+
+func TestValidateDelay(t *testing.T) {
+	for _, delay := range []time.Duration{0, time.Millisecond, time.Second} {
+		if err := validateDelay(delay); err != nil {
+			t.Fatalf("delay=%v error=%v", delay, err)
+		}
+	}
+	if err := validateDelay(-time.Millisecond); err == nil {
+		t.Fatal("expected negative delay validation error")
 	}
 }
