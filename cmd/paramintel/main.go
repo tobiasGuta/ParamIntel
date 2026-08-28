@@ -19,7 +19,7 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
 
-const version = "0.4.0"
+const version = "0.5.0"
 
 func main() {
 	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath string
