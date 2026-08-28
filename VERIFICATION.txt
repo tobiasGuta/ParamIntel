@@ -1,151 +1,263 @@
-ParamIntel v0.4.0 verification
+ParamIntel v0.5.0 verification
 Date: 2026-08-28
+Status: PASS — automated implementation acceptance and Windows external CLI acceptance complete
 
-Automated checks completed on the v0.4 implementation branch:
+Release goal
+------------
+v0.5 protects ParamIntel's evidence model from responses that are known to represent rate limiting or explicit server backoff, and adds optional global request-start pacing without changing the discovery algorithms or confidence model.
+
+Core invariant:
+- a response known to be rate-limited/backoff must never become a model.Snapshot used by compare.AgainstBaseline
+
+Implementation status
+---------------------
+Slice 1 — typed backoff classification: COMPLETE
+- HTTP 429 always becomes a typed rate_limit BackoffError
+- HTTP 503 becomes server_backoff only with a valid Retry-After
+- Retry-After integer seconds supported
+- Retry-After HTTP-date supported
+- malformed Retry-After on 429 is retained as raw metadata but is not trusted as parsed timing
+- ordinary 503 remains an ordinary response
+- ordinary 403 remains an ordinary response
+- classified responses are rejected before Snapshot construction
+- rejected response bodies are still closed
+- baseline construction aborts immediately if any sample is classified as backoff
+- errors.As can recover BackoffError through wrapped baseline errors
+
+Slice 2 — global request-start pacing: COMPLETE
+- added -delay duration flag
+- default -delay 0 preserves previous unpaced behavior
+- negative delay rejected before network activity
+- pacing implemented once at the shared HTTP transport
+- the same paced client is used by baseline construction and the discovery engine
+- spacing is measured between request starts, not as unconditional post-response sleep
+- context cancellation interrupts a pacing wait
+- pacing state is race-safe
+- zero delay returns the underlying transport unchanged
+
+Slice 3 — discovery-phase evidence integrity: COMPLETE
+- group probe 429 aborts scan; no narrowing decision is made from limiter behavior
+- candidate probe 429 aborts verification before control is sent
+- random-name control 429 invalidates the paired experiment; no partial confidence/trial result is returned
+- value-aware candidate screen 429 aborts rescue with no finding
+- value-aware same-value control 429 aborts rescue with no finding
+- semantic request budget still counts requests that were actually sent before the 429
+- characterization 429 after a valid discovery aborts the scan rather than returning a partially characterized normal result
+- real CLI subprocess regression proves rate-limit abort exits non-zero and does not create the requested findings file
+
+Slice 4 — release hardening: COMPLETE
+- CLI version bumped to ParamIntel v0.5.0
+- release version is pinned by an automated test
+- README updated for the v0.5 evidence-integrity model
+- CHANGELOG updated for v0.5.0
+- reproducible Windows acceptance lab added under labs/v0.5-rate-limit
+- Windows Lab A externally accepted
+- Windows Lab B externally accepted
+- Windows Lab C externally accepted, including server-side request-start timing
+
+Automated gates
+---------------
+Exact release-hardening repository head before final external-result documentation:
+  32f15d3f0e024dbe158033cc3ce8a578b8bbb6fb
+
+GitHub Actions run #93:
 - go test ./...: PASS
 - go vet ./...: PASS
 - go test -race ./...: PASS
-- Linux amd64 build: PASS
+- Linux build: PASS
 - Windows amd64 cross-build: PASS
-- GitHub Actions full matrix: PASS
-- CLI version updated to ParamIntel v0.4.0
-- v0.2 state-changing-method safety guard remains in place
 
-Core v0.4 behavior:
-- existing random-string batch/narrow discovery remains the first-pass detector
-- value-aware discovery is a bounded rescue pass for clean generic misses
-- semantic candidate probes are paired with same-value random-name controls
-- candidate/control value kind and value remain identical; only the parameter name changes
-- evidence from different semantic values is never pooled
-- repeated explicit-value verification still uses the standard confidence model
-- -value-aware defaults to true
-- -value-aware-budget defaults to 64 additional requests
-- the semantic budget reserves complete repeated-verification cost before confirmation begins
-- the semantic budget never exceeds the configured cap
-- exact final budget consumption is reported as exhausted
-- candidates with generic candidate/control activity are not reinterpreted by semantic rescue; only clean misses are eligible
-- -characterize=false does not disable value-aware discovery
-- findings record discovery_mode, discovery_value, and discovery_value_kind
+Earlier exact heads also passed the same full CI gates after Slice 1, Slice 2, and Slice 3.
 
-Key v0.4 regression/integration coverage:
-- v0.3-style generic verification misses a controlled debug parameter when only debug=true has behavior
-- value-aware rescue discovers debug using true
-- debug=true changes 3/3 repeated candidate trials while the same-value random-name control changes 0/3
-- generic behavior caused by any parameter name is rejected because the same-value random-name control reproduces it
-- an insufficient semantic budget does not start partial repeated verification
-- deterministic ordering is preserved when the budget can confirm only the first of multiple semantic candidates
-- query value-aware discovery records string value provenance
-- JSON semantic discovery sends real boolean/integer JSON types rather than string approximations
-- a nested context-derived candidate can retain context provenance and also be discovered value-aware
-- nested $.options.include_deleted preserves source=context_response_only_json_property and observed_type=boolean
-- $.options.include_deleted is rescued using typed JSON boolean true
-- context observation alone still does not create a finding
+A final exact-head CI run is required after this verification record is committed and before the pull request is opened.
 
-Preserved v0.3/v0.2 coverage:
-- related-response JSON candidate intelligence
-- request-versus-response structural comparison
-- contextual candidate prioritization and provenance
-- PortSwigger mass-assignment-style $.chosen_discount regression
-- synthetic contextual false-lead rejection
-- GraphQL-style hidden query verification
-- form-body parameter discovery
-- root and nested JSON discovery
-- JSON-shaped request bodies under non-JSON MIME types such as text/plain
-- paired random-name negative-control rejection
-- multi-request baseline stability filtering
-- conservative type inference and optional value characterization
-- secure entropy generation and fail-closed token errors
-- arrays remain excluded from JSON insertion semantics
+Backoff classification acceptance
+---------------------------------
+Automated tests prove:
 
-Manual Windows external acceptance — value-sensitive query parameter:
+1. 429 never becomes a Snapshot.
+2. BackoffError is discoverable through errors.As.
+3. Retry-After seconds parse correctly.
+4. Retry-After HTTP-date parses correctly.
+5. malformed Retry-After on 429 does not panic and remains raw metadata.
+6. 503 + valid Retry-After becomes server_backoff.
+7. 503 without Retry-After remains an ordinary response.
+8. 503 + malformed Retry-After remains an ordinary response.
+9. 403 remains an ordinary response.
+10. rejected 429 response bodies are closed.
+11. a baseline that receives 429 fails immediately and does not accept remaining samples.
 
-Controlled endpoint behavior:
-- GET /api/users -> baseline JSON
-- GET /api/users?debug=<arbitrary-string> -> baseline JSON
-- GET /api/users?debug=true -> stable debug object added
-- GET /api/users?<random-name>=true -> baseline JSON
+Discovery integrity acceptance
+------------------------------
+Automated tests prove:
 
-v0.3 result on the same endpoint:
-- baseline: 5 samples
-- status 200 stable
-- body length 26-26 bytes
+- group probe -> 429
+  result: Scan returns BackoffError and no normal results
+
+- candidate -> 429
+  result: control is not sent and no confidence/trials are returned
+
+- candidate -> normal behavioral change; random control -> 429
+  result: pair is invalid, scan errors, no partial confidence is produced
+
+- value-aware screen -> 429
+  result: rescue errors, no result/value is returned, one actually-sent request is charged to semantic budget
+
+- value-aware candidate screen -> meaningful; same-value control -> 429
+  result: rescue errors, no finding, two actually-sent requests are charged to semantic budget
+
+- confirmed candidate -> characterization -> 429
+  result: Scan aborts and does not return a normal partially characterized result
+
+CLI report-suppression acceptance
+---------------------------------
+Automated subprocess test runs the real CLI against a local 429 server with an -output path.
+
+Required and observed automated behavior:
+- CLI exits non-zero
+- diagnostic contains "rate limit detected"
+- diagnostic contains "response was not used as discovery evidence"
+- requested findings file is not created
+
+Pacing acceptance
+-----------------
+Automated tests prove:
+- -delay 0 adds no pacing wrapper
+- positive delay enforces minimum request-start spacing
+- elapsed time from a slow previous response can satisfy the configured start interval, avoiding unnecessary additional delay
+- waiting is context-cancellable
+- concurrent transport use passes go test -race
+- negative CLI delay is rejected
+
+External Windows CLI acceptance
+-------------------------------
+Lab A — mid-scan 429
+Status: PASS
+Observed Windows CLI behavior:
+- baseline: 3 samples
+- baseline status: 200 stable
+- baseline body length: 19-19 bytes
 - stable JSON paths: 4
-- 26 query candidate placements tested
-- final report: 0 parameters
+- active location: query
+- total candidate placements: 26 in 1 initial group
+- active group probe aborted with:
+  probe group query:account_id: rate limit detected: HTTP 429 (Retry-After: 2); response was not used as discovery evidence
+- process exit code: 1
+- Test-Path v05-mid-scan-findings.json returned False
 
-v0.4 result on the same endpoint:
-- baseline: 5 samples
-- status 200 stable
-- body length 26-26 bytes
-- stable JSON paths: 4
-- 26 query candidate placements tested
-- value-aware eligible candidates: 17
-- semantic probe budget: 64 requests
-- debug discovered with discovery_mode=value_aware
-- discovery_value=true
-- discovery_value_kind=string
-- candidate behavior changed 3/3
-- paired same-value random-name control changed 0/3
-- confidence: 1.00 HIGH
-- final report contained exactly 1 parameter: debug
-- evidence included $.debug.__keys, $.debug.cache, $.debug.database_ms, and the root key-set change
-- -characterize=false was used, confirming value-aware discovery is independent of characterization
-- the semantic request budget reached exactly 64/64 and did not exceed the configured cap
+Conclusion:
+- baseline evidence remained valid before rate limiting began
+- the first classified mid-scan 429 aborted group probing rather than becoming narrowing evidence
+- no normal findings report was emitted after evidence integrity was lost
 
-Manual acceptance conclusion:
-- v0.4 fixes the demonstrated probe-value-selection false negative without changing the candidate list, placement model, confidence threshold, or negative-control philosophy.
-- the improvement comes from trying bounded semantic values earlier in discovery, not from weakening verification.
-
-Manual Windows external acceptance — contextual nested typed-boolean composition:
-
-Controlled request and related response:
-- POST /api/items request contained options.page_size and items, but not options.include_deleted
-- related JSON response contained options.include_deleted=false
+Lab B — asymmetric candidate/control limiter
+Status: PASS
+Observed Windows CLI behavior:
 - context intelligence observed 4 JSON properties
 - actionable response-only candidates: 1
 - skipped already-present properties: 3
 - skipped candidates with missing request parent: 0
-
-v0.4 result:
-- baseline: 5 samples
-- status 200 stable
-- body length 34-34 bytes
-- stable JSON paths: 4
+- baseline: 3 samples
+- baseline status: 200 stable
+- baseline body length: 22-22 bytes
+- stable JSON paths: 3
 - active location: json
-- exactly 1 contextual candidate placement prioritized
-- 52 total candidate placements tested in 15 initial groups
-- value-aware eligible candidates: 34
-- semantic probe budget: 32 requests
-- $.options.include_deleted discovered with source=context_response_only_json_property
-- source path: $.options.include_deleted
-- observed_type=boolean
-- priority=100
-- discovery_mode=value_aware
-- discovery_value=true
-- discovery_value_kind=boolean
-- candidate behavior changed 3/3
-- paired same-value random-name control changed 0/3
-- confidence: 1.00 HIGH
-- final report contained exactly 1 parameter: include_deleted
-- evidence included $.deleted_included, $.items[2], the root key-set change, and $.items.__len changing from 2 to 3
-- -characterize=false was used, confirming contextual value-aware discovery remains independent of post-discovery characterization
-- the semantic request budget reached exactly 32/32 and was reported exhausted without exceeding the cap
+- prioritized contextual candidate placements: 1
+- total candidate placements: 52 in 3 initial groups
+- scan aborted with:
+  rate limit detected: HTTP 429 (Retry-After: 2); response was not used as discovery evidence
+- process exit code: 1
+- requested v05-asymmetric-findings.json did not exist after the run
 
-Context/value composition conclusion:
-- v0.4 externally validates that v0.3 candidate provenance and v0.4 value-aware discovery can compose in the real CLI path.
-- the related response explains why $.options.include_deleted was tested; the typed boolean true probe and paired random-name control independently establish why it was reported.
-- typed JSON boolean semantics are preserved rather than approximated with the string "true".
+Conclusion:
+- an asymmetric limiter response invalidated the experiment instead of producing a confidence score or findings report
+- the real Windows CLI preserved the fail-closed evidence-integrity boundary
 
-Request-efficiency review:
-- the default 64-request semantic cap can be fully consumed even with a modest candidate set
-- no semantic profile values were removed solely to reduce request count because that would reduce recall for applications accepting only one representation such as true/false/1/0
-- bounded request cost remains controlled by the global semantic budget pending future evidence for safer optimization
+Lab C — pacing
+Status: PASS
+Observed Windows CLI behavior:
+- baseline: 3 samples
+- baseline status: 200 stable
+- baseline body length: 11-11 bytes
+- stable JSON paths: 2
+- CLI reported: Request pacing: minimum 100ms between request starts
+- active location: query
+- total candidate placements: 26 in 1 initial group
+- scan completed normally with 0 parameters
+- requested v05-pace-findings.json was written
+- process exit code: 0
+- Test-Path v05-pace-findings.json returned True
 
-Known benchmark boundaries retained from pre-v0.4 testing:
-- hidden GraphQL query default acquisition miss is a candidate-acquisition limitation, not a verifier failure
-- server-side parameter pollution inside another parameter value remains outside the current query/form/JSON placement model
-- shared intermediary caching can violate probe independence and requires separate cache-aware design rather than ad hoc changes in v0.4
+Observed acceptance-lab server request-start timing:
+- request 1: start
+- request 2: gap=100ms
+- request 3: gap=100ms
+- request 4: gap=101ms
 
-Scope boundary:
-- v0.4 does not add cache-awareness, server-side parameter-pollution mutation, missing-parent JSON scaffolding synthesis, array insertion, AI-generated values, Burp/MCP integration, or broad business-state enum spraying.
-- ParamIntel findings remain research leads requiring manual authorization, impact, and exploitability validation.
+Conclusion:
+- real Windows CLI traffic respected the configured 100ms minimum request-start spacing
+- pacing applied during baseline and continued into active discovery using the same shared client policy
+- pacing did not change the baseline-like endpoint outcome or create false findings
+
+External acceptance conclusion
+------------------------------
+All three v0.5 Windows acceptance cases PASS:
+- known mid-scan limiter behavior aborts before becoming discovery evidence
+- asymmetric candidate/control limiter behavior invalidates the experiment and emits no normal findings report
+- global request-start pacing is observable at approximately the configured interval in the real CLI path
+
+Preserved v0.4 regression model
+-------------------------------
+v0.5 does not change candidate acquisition, mutation semantics, confidence scoring, or value-aware rescue logic.
+
+Existing automated coverage retained includes:
+- debug=true value-aware discovery
+- paired same-value random-name false-positive rejection
+- insufficient semantic-budget refusal
+- deterministic semantic budget ordering
+- typed JSON boolean/integer semantic probes
+- context + typed boolean $.options.include_deleted composition
+- related-response candidate provenance
+- GraphQL-style seeded query verification
+- form-body discovery
+- root/nested JSON discovery
+- nonstandard JSON MIME handling
+- contextual chosen_discount mass-assignment regression
+- negative-control rejection
+- entropy failure remains fail-closed
+
+Historical v0.4 external acceptance
+-----------------------------------
+Value-sensitive query case:
+- same controlled debug endpoint returned 0 parameters in v0.3
+- v0.4 discovered debug using discovery_value=true
+- discovery_value_kind=string
+- candidate changed 3/3
+- random-name same-value control changed 0/3
+- confidence 1.00 HIGH
+- -characterize=false confirmed discovery is independent of characterization
+
+Context + typed JSON case:
+- related response contributed $.options.include_deleted with observed_type=boolean
+- v0.4 discovered it using typed JSON boolean true
+- candidate changed 3/3
+- random control changed 0/3
+- confidence 1.00 HIGH
+- candidate_sources and discovery provenance were both preserved
+
+Known boundaries
+----------------
+v0.5 deliberately does not add:
+- automatic retries after 429/503
+- automatic sleeping/resume from Retry-After
+- adaptive concurrency
+- rate-limit/WAF inference from arbitrary 403 pages or body text
+- cache-aware probe correlation
+- server-side parameter-pollution mutation inside another parameter value
+- missing-parent JSON scaffolding synthesis
+- array insertion
+- AI-generated semantic values
+- Burp/MCP integration
+- broad business-state enum spraying
+
+ParamIntel findings remain research leads requiring manual authorization, impact, and exploitability validation.
