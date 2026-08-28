@@ -58,10 +58,18 @@ const (
 	LocationJSON  = "json"
 )
 
+type CandidateSource struct {
+	Source       string `json:"source"`
+	Path         string `json:"path,omitempty"`
+	ObservedType string `json:"observed_type,omitempty"`
+	Priority     int    `json:"priority,omitempty"`
+}
+
 type Candidate struct {
 	Name       string
 	Location   string
 	JSONParent string
+	Sources    []CandidateSource
 }
 
 func (c Candidate) JSONPath() string {
@@ -106,6 +114,7 @@ type ParameterResult struct {
 	Name                 string             `json:"name"`
 	Location             string             `json:"location"`
 	JSONPath             string             `json:"json_path,omitempty"`
+	CandidateSources     []CandidateSource  `json:"candidate_sources,omitempty"`
 	Confidence           ConfidenceScore    `json:"confidence"`
 	ConfidenceLabel      string             `json:"confidence_label"`
 	CandidateChanged     int                `json:"candidate_changed"`

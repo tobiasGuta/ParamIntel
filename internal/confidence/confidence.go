@@ -1,5 +1,11 @@
 package confidence
 
+// Score is a deterministic evidence-ranking heuristic, not a calibrated
+// probability or statistical-significance estimate. The weights deliberately
+// prioritize three things for small active-testing trial counts: reproducible
+// candidate behavior, divergence from random-name controls, and diversity of
+// independent response evidence. They are intentionally conservative and can
+// be revisited if a sufficiently large labeled benchmark corpus is collected.
 func Score(candidateChanged, candidateTrials, controlChanged, controlTrials int, evidenceKinds int) float64 {
 	if candidateTrials == 0 {
 		return 0
@@ -10,8 +16,9 @@ func Score(candidateChanged, candidateTrials, controlChanged, controlTrials int,
 		ctrl = float64(controlChanged) / float64(controlTrials)
 	}
 
-	// A candidate that behaves like a random unknown parameter is weak evidence,
-	// even when the candidate response is perfectly reproducible.
+	// Most weight goes to reproducible behavior that random controls do not
+	// reproduce. A smaller reproducibility term prevents one evidence dimension
+	// from dominating, and evidence diversity adds only a capped bonus.
 	score := 0.80 * cand * (1 - ctrl)
 	score += 0.10 * cand
 	if evidenceKinds >= 2 {
@@ -20,6 +27,8 @@ func Score(candidateChanged, candidateTrials, controlChanged, controlTrials int,
 		score += 0.05
 	}
 
+	// If random unknown parameters reproduce the candidate at least as often,
+	// strongly demote the result even when the endpoint itself is noisy.
 	if ctrl >= cand && ctrl > 0 {
 		score *= 0.25
 	}

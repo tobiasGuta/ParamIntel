@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
+	"io"
 	"sort"
 
 	"github.com/tobiasGuta/ParamIntel/internal/baseline"
@@ -13,7 +15,11 @@ import (
 )
 
 func (e Engine) verify(ctx context.Context, tmpl model.RequestTemplate, p model.BaselineProfile, candidate model.Candidate, trials int) (model.ParameterResult, error) {
-	value := model.StringValue(token())
+	probeToken, err := token()
+	if err != nil {
+		return model.ParameterResult{}, err
+	}
+	value := model.StringValue(probeToken)
 	candChanged, ctrlChanged := 0, 0
 	evidence := map[string]model.Difference{}
 	for i := 0; i < trials; i++ {
@@ -29,8 +35,13 @@ func (e Engine) verify(ctx context.Context, tmpl model.RequestTemplate, p model.
 			}
 		}
 
+		controlToken, err := token()
+		if err != nil {
+			return model.ParameterResult{}, err
+		}
 		control := candidate
-		control.Name = "zz_pi_" + token()
+		control.Name = "zz_pi_" + controlToken
+		control.Sources = nil
 		cs, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{{Candidate: control, Value: value}})
 		if err != nil {
 			return model.ParameterResult{}, err
@@ -57,6 +68,7 @@ func (e Engine) verify(ctx context.Context, tmpl model.RequestTemplate, p model.
 		Name:                 candidate.Name,
 		Location:             candidate.Location,
 		JSONPath:             candidate.JSONPath(),
+		CandidateSources:     append([]model.CandidateSource(nil), candidate.Sources...),
 		Confidence:           model.ConfidenceScore(score),
 		ConfidenceLabel:      confidence.Label(score),
 		CandidateChanged:     candChanged,
@@ -67,10 +79,14 @@ func (e Engine) verify(ctx context.Context, tmpl model.RequestTemplate, p model.
 	}, nil
 }
 
-func token() string {
-	var b [4]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "a1b2c3d4"
+func token() (string, error) {
+	return tokenFromReader(rand.Reader)
+}
+
+func tokenFromReader(r io.Reader) (string, error) {
+	var b [8]byte
+	if _, err := io.ReadFull(r, b[:]); err != nil {
+		return "", fmt.Errorf("generate probe token: %w", err)
 	}
-	return hex.EncodeToString(b[:])
+	return hex.EncodeToString(b[:]), nil
 }

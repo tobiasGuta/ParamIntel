@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.0
+
+- Added `-context-response` for deriving high-signal JSON parameter candidates from a related API response.
+- Added request-versus-response JSON structural comparison so only response-only properties are prioritized.
+- Added exact JSON placement hints, allowing contextual fields such as `$.chosen_discount` or `$.filters.limit` to be tested before generic wordlist placements.
+- Added candidate provenance to findings, including source path, observed JSON type, and priority.
+- Preserved the v0.2 batch/narrow, repeated verification, paired random-control, confidence, and characterization paths unchanged for contextual candidates.
+- Added support for raw Burp-style HTTP responses and bare JSON bodies as context inputs.
+- Context harvesting is structured-key based only; response text values are never tokenized into candidate names.
+- Contextual nested fields are only actionable when their parent object already exists in the request. v0.3 does not synthesize missing object scaffolding or mutate arrays.
+- Added regression coverage modeled on the PortSwigger mass-assignment workflow: `chosen_discount` is discovered from response context even when absent from the supplied wordlist.
+- Added local Burp request/response and wordlist directories to `.gitignore` to reduce the risk of committing session-bearing research artifacts.
+
 ## v0.2.0
 
 - Added `application/x-www-form-urlencoded` body parameter discovery.

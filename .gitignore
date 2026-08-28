@@ -4,10 +4,13 @@ paramintel.exe
 paramintel-*
 dist/
 
-# Scan outputs / local requests
+# Scan outputs / local research artifacts
 findings.json
 findins.json
 request.txt
+burprequests/
+burpresponses/
+wordlists/
 *.log
 
 # IDE / OS

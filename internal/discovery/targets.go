@@ -13,23 +13,29 @@ import (
 )
 
 func buildTargets(tmpl model.RequestTemplate, words, locations []string, maxJSONDepth int) ([]model.Candidate, error) {
-	active := locations
-	if len(active) == 0 || (len(active) == 1 && active[0] == "auto") {
-		active = []string{model.LocationQuery}
-		ct := strings.ToLower(tmpl.Headers.Get("Content-Type"))
-		if strings.HasPrefix(ct, "application/x-www-form-urlencoded") {
-			active = append(active, model.LocationForm)
-		}
-		// JSON-shaped bodies are discovered from structure, not MIME type.
-		// This covers real applications that submit JSON with text/plain while
-		// preserving the captured Content-Type during replay.
-		if len(mutate.JSONObjectParents(tmpl.Body, maxJSONDepth)) > 0 {
-			active = append(active, model.LocationJSON)
-		}
+	return buildTargetsWithSeeds(tmpl, words, locations, maxJSONDepth, nil)
+}
+
+func buildTargetsWithSeeds(tmpl model.RequestTemplate, words, locations []string, maxJSONDepth int, seeds []model.Candidate) ([]model.Candidate, error) {
+	active := activeLocations(tmpl, locations, maxJSONDepth)
+	activeSet := make(map[string]struct{}, len(active))
+	for _, location := range active {
+		activeSet[location] = struct{}{}
 	}
 
 	var out []model.Candidate
 	seen := map[string]struct{}{}
+
+	// Context-derived candidates are intentionally inserted before generic
+	// wordlist candidates. This makes high-signal application-specific fields
+	// run first while preserving the exact same verifier and controls.
+	for _, seed := range seeds {
+		if _, ok := activeSet[seed.Location]; !ok {
+			continue
+		}
+		appendCandidate(&out, seen, seed)
+	}
+
 	for _, location := range active {
 		switch location {
 		case model.LocationQuery, model.LocationForm:
@@ -53,6 +59,25 @@ func buildTargets(tmpl model.RequestTemplate, words, locations []string, maxJSON
 	return out, nil
 }
 
+func activeLocations(tmpl model.RequestTemplate, locations []string, maxJSONDepth int) []string {
+	active := locations
+	if len(active) != 0 && !(len(active) == 1 && active[0] == "auto") {
+		return active
+	}
+	active = []string{model.LocationQuery}
+	ct := strings.ToLower(tmpl.Headers.Get("Content-Type"))
+	if strings.HasPrefix(ct, "application/x-www-form-urlencoded") {
+		active = append(active, model.LocationForm)
+	}
+	// JSON-shaped bodies are discovered from structure, not MIME type.
+	// This covers real applications that submit JSON with text/plain while
+	// preserving the captured Content-Type during replay.
+	if len(mutate.JSONObjectParents(tmpl.Body, maxJSONDepth)) > 0 {
+		active = append(active, model.LocationJSON)
+	}
+	return active
+}
+
 func appendCandidate(out *[]model.Candidate, seen map[string]struct{}, c model.Candidate) {
 	key := candidateKey(c)
 	if _, ok := seen[key]; ok {
@@ -66,7 +91,13 @@ func groupTargets(targets []model.Candidate, chunkSize int) [][]model.Candidate 
 	byPlacement := map[string][]model.Candidate{}
 	var order []string
 	for _, c := range targets {
-		placement := c.Location + "|" + c.JSONParent
+		tier := "generic"
+		if len(c.Sources) > 0 {
+			tier = "context"
+		}
+		// Keep contextual candidates in their own first-pass groups rather than
+		// mixing them into a generic dictionary batch at the same placement.
+		placement := tier + "|" + c.Location + "|" + c.JSONParent
 		if _, ok := byPlacement[placement]; !ok {
 			order = append(order, placement)
 		}
@@ -114,7 +145,11 @@ func (e Engine) narrow(ctx context.Context, tmpl model.RequestTemplate, p model.
 }
 
 func (e Engine) groupInteresting(ctx context.Context, tmpl model.RequestTemplate, p model.BaselineProfile, group []model.Candidate) (bool, error) {
-	value := model.StringValue(token())
+	probeToken, err := token()
+	if err != nil {
+		return false, err
+	}
+	value := model.StringValue(probeToken)
 	mutations := make([]model.Mutation, 0, len(group))
 	for _, candidate := range group {
 		mutations = append(mutations, model.Mutation{Candidate: candidate, Value: value})
