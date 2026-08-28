@@ -26,9 +26,7 @@ func okResponse(req *http.Request) *http.Response {
 }
 
 func TestNewPacedTransportZeroDelayReturnsBase(t *testing.T) {
-	base := roundTripFunc(func(req *http.Request) (*http.Response, error) {
-		return okResponse(req), nil
-	})
+	base := http.DefaultTransport
 	if got := NewPacedTransport(base, 0); got != base {
 		t.Fatalf("zero delay should return underlying transport unchanged")
 	}
