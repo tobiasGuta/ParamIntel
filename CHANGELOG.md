@@ -16,7 +16,7 @@
 - Automatic retry/wait-on-`Retry-After` is intentionally not included in v0.5.0, especially for potentially state-changing methods.
 - Added a reproducible Windows acceptance lab covering mid-scan 429 aborts, asymmetric candidate/control rate limiting, and `-delay` pacing.
 - Release version updated to `ParamIntel v0.5.0`.
-- Automated release gates are complete; external Windows acceptance remains required before the v0.5 pull request is considered ready to merge.
+- Automated release gates and external Windows acceptance are complete, including mid-scan 429 abort, asymmetric candidate/control invalidation, and observed 100ms/100ms/101ms request-start pacing with `-delay 100ms`.
 
 ## v0.4.0
 
