@@ -51,42 +51,23 @@ This avoids turning a related API response into a large, noisy wordlist.
 
 ## Detection model
 
-```text
-raw authenticated request
-        |
-        +-------------------------------+
-        |                               |
-        v                               v
-multi-request baseline        optional related JSON response
-                                        |
-                                        v
-                              request/response structural diff
-                                        |
-                                        v
-                              response-only exact candidates
-                                        |
-        +-------------------------------+
-        |
-        v
-candidate placement generation
-(context candidates first, then generic query/form/JSON candidates)
-        |
-        v
-batch + recursive narrowing
-        |
-        v
-individual candidate verification
-        |
-        +--> random unknown parameter control
-        |
-        v
-reproducibility + confidence
-        |
-        v
-confirmed parameter + provenance
-        |
-        v
-optional type/value characterization
+```mermaid
+flowchart TD
+    A["Raw authenticated request"] --> B["Multi-request baseline"]
+    A --> C["Optional related JSON response"]
+    C --> D["Request / response structural diff"]
+    D --> E["Response-only exact candidates"]
+
+    B --> F["Candidate placement generation<br/>(context candidates first, then generic query/form/JSON candidates)"]
+    E --> F
+
+    F --> G["Batch + recursive narrowing"]
+    G --> H["Individual candidate verification"]
+    H --> I["Random unknown parameter control"]
+    H --> J["Reproducibility + confidence"]
+    I --> J
+    J --> K["Confirmed parameter + provenance"]
+    K --> L["Optional type/value characterization"]
 ```
 
 A reported parameter is a **research lead**, not proof of a vulnerability. Authorization, business-logic impact, and exploitability still require manual validation within program scope.
