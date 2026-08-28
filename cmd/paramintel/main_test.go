@@ -13,6 +13,12 @@ import (
 	"time"
 )
 
+func TestVersion(t *testing.T) {
+	if version != "0.5.0" {
+		t.Fatalf("version=%q want=0.5.0", version)
+	}
+}
+
 func TestParseLocations(t *testing.T) {
 	got, err := parseLocations("json, query,json")
 	if err != nil {
