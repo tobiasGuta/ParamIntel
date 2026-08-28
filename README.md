@@ -137,6 +137,8 @@ semantic probe budget exhausted: 64/64 requests used
 
 The default semantic profiles remain intentionally small. ParamIntel does not spray large business-state enum dictionaries automatically.
 
+Value-aware profiles are deliberately curated rather than exhaustive. They cover common high-signal parameter patterns, and new profiles should be added from demonstrated discovery gaps with regression evidence rather than speculative value dictionaries.
+
 ## Context intelligence + value-aware discovery
 
 v0.3 and v0.4 compose.
