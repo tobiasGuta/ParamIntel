@@ -19,7 +19,13 @@ func (e Engine) verify(ctx context.Context, tmpl model.RequestTemplate, p model.
 	if err != nil {
 		return model.ParameterResult{}, err
 	}
-	value := model.StringValue(probeToken)
+	return e.verifyWithValue(ctx, tmpl, p, candidate, model.StringValue(probeToken), trials)
+}
+
+// verifyWithValue runs the standard repeated candidate/control experiment with
+// one explicit probe value. Candidate and random-name control always receive
+// the exact same value and value kind; only the parameter name changes.
+func (e Engine) verifyWithValue(ctx context.Context, tmpl model.RequestTemplate, p model.BaselineProfile, candidate model.Candidate, value model.ProbeValue, trials int) (model.ParameterResult, error) {
 	candChanged, ctrlChanged := 0, 0
 	evidence := map[string]model.Difference{}
 	for i := 0; i < trials; i++ {

@@ -115,6 +115,9 @@ type ParameterResult struct {
 	Location             string             `json:"location"`
 	JSONPath             string             `json:"json_path,omitempty"`
 	CandidateSources     []CandidateSource  `json:"candidate_sources,omitempty"`
+	DiscoveryMode        string             `json:"discovery_mode,omitempty"`
+	DiscoveryValue       string             `json:"discovery_value,omitempty"`
+	DiscoveryValueKind   string             `json:"discovery_value_kind,omitempty"`
 	Confidence           ConfidenceScore    `json:"confidence"`
 	ConfidenceLabel      string             `json:"confidence_label"`
 	CandidateChanged     int                `json:"candidate_changed"`
