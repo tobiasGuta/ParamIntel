@@ -1,6 +1,6 @@
 ParamIntel v0.5.0 verification
 Date: 2026-08-28
-Status: automated implementation acceptance PASS; external Windows CLI acceptance PENDING
+Status: automated implementation acceptance PASS; Windows Lab B PASS; Windows Lab C CLI-side PASS; Lab A and Lab C server timestamps PENDING
 
 Release goal
 ------------
@@ -51,23 +51,23 @@ Slice 4 — release hardening: IN PROGRESS
 - README updated for the v0.5 evidence-integrity model
 - CHANGELOG updated for v0.5.0
 - reproducible Windows acceptance lab added under labs/v0.5-rate-limit
-- external acceptance results are intentionally not marked PASS until run on Windows
+- Windows Lab B externally accepted
+- Windows Lab C CLI behavior externally accepted; server timestamp spacing still pending review
+- Windows Lab A still pending
 
 Automated gates
 ---------------
-Exact Slice 3 implementation head:
-  d13234ae6bb02dc973b84ebf5bb4db5d2ad18d08
+Exact release-hardening repository head before external-result documentation:
+  32f15d3f0e024dbe158033cc3ce8a578b8bbb6fb
 
-GitHub Actions run #85:
+GitHub Actions run #93:
 - go test ./...: PASS
 - go vet ./...: PASS
 - go test -race ./...: PASS
 - Linux build: PASS
 - Windows amd64 cross-build: PASS
 
-Earlier exact heads also passed the same full CI gates after Slice 1 and Slice 2.
-
-The final release-hardening head must pass the same full matrix again after documentation/lab changes settle and before the PR is opened.
+Earlier exact heads also passed the same full CI gates after Slice 1, Slice 2, and Slice 3.
 
 Backoff classification acceptance
 ---------------------------------
@@ -127,13 +127,11 @@ Automated tests prove:
 - concurrent transport use passes go test -race
 - negative CLI delay is rejected
 
-External Windows CLI acceptance — PENDING
------------------------------------------
-Use:
-  labs/v0.5-rate-limit/README.md
-
+External Windows CLI acceptance
+-------------------------------
 Lab A — mid-scan 429
-PENDING criteria:
+Status: PENDING
+Criteria:
 - baseline completes normally
 - active query probe receives 429 Retry-After: 2
 - ParamIntel aborts at first 429
@@ -142,22 +140,47 @@ PENDING criteria:
 - requested normal findings file is absent
 
 Lab B — asymmetric candidate/control limiter
-PENDING criteria:
-- context intelligence derives exactly $.options.include_deleted
-- candidate produces normal behavioral change
-- generated zz_pi_... control receives 429
-- no confidence score/finding is emitted from the invalid pair
-- scan exits non-zero
-- normal findings file is absent
+Status: PASS
+Observed Windows CLI behavior:
+- context intelligence observed 4 JSON properties
+- actionable response-only candidates: 1
+- skipped already-present properties: 3
+- skipped candidates with missing request parent: 0
+- baseline: 3 samples
+- baseline status: 200 stable
+- baseline body length: 22-22 bytes
+- stable JSON paths: 3
+- active location: json
+- prioritized contextual candidate placements: 1
+- total candidate placements: 52 in 3 initial groups
+- scan aborted with:
+  rate limit detected: HTTP 429 (Retry-After: 2); response was not used as discovery evidence
+- process exit code: 1
+- requested v05-asymmetric-findings.json did not exist after the run
+
+Conclusion:
+- an asymmetric limiter response invalidated the experiment instead of producing a confidence score or findings report
+- the real Windows CLI preserved the fail-closed evidence-integrity boundary
 
 Lab C — pacing
-PENDING criteria:
-- run uses -delay 100ms
-- CLI reports minimum 100ms request-start pacing
-- lab-server request-start timestamps are approximately at or above the configured interval rather than back-to-back
-- endpoint remains baseline-like and scan completes normally with zero findings
+Status: CLI-SIDE PASS; SERVER TIMESTAMP REVIEW PENDING
+Observed Windows CLI behavior:
+- baseline: 3 samples
+- baseline status: 200 stable
+- baseline body length: 11-11 bytes
+- stable JSON paths: 2
+- CLI reported: Request pacing: minimum 100ms between request starts
+- active location: query
+- total candidate placements: 26 in 1 initial group
+- scan completed normally with 0 parameters
+- requested v05-pace-findings.json was written
+- process exit code: 0
+- Test-Path v05-pace-findings.json returned True
 
-Do not change the status above to PASS until actual Windows CLI output has been reviewed.
+Remaining Lab C criterion:
+- review the lab-server [pace] request-start lines and confirm consecutive starts are approximately >=100ms rather than back-to-back
+
+Do not mark full Windows external acceptance PASS until Lab A and the Lab C server timing lines have been reviewed.
 
 Preserved v0.4 regression model
 -------------------------------
