@@ -96,6 +96,46 @@ Manual acceptance conclusion:
 - v0.4 fixes the demonstrated probe-value-selection false negative without changing the candidate list, placement model, confidence threshold, or negative-control philosophy.
 - the improvement comes from trying bounded semantic values earlier in discovery, not from weakening verification.
 
+Manual Windows external acceptance — contextual nested typed-boolean composition:
+
+Controlled request and related response:
+- POST /api/items request contained options.page_size and items, but not options.include_deleted
+- related JSON response contained options.include_deleted=false
+- context intelligence observed 4 JSON properties
+- actionable response-only candidates: 1
+- skipped already-present properties: 3
+- skipped candidates with missing request parent: 0
+
+v0.4 result:
+- baseline: 5 samples
+- status 200 stable
+- body length 34-34 bytes
+- stable JSON paths: 4
+- active location: json
+- exactly 1 contextual candidate placement prioritized
+- 52 total candidate placements tested in 15 initial groups
+- value-aware eligible candidates: 34
+- semantic probe budget: 32 requests
+- $.options.include_deleted discovered with source=context_response_only_json_property
+- source path: $.options.include_deleted
+- observed_type=boolean
+- priority=100
+- discovery_mode=value_aware
+- discovery_value=true
+- discovery_value_kind=boolean
+- candidate behavior changed 3/3
+- paired same-value random-name control changed 0/3
+- confidence: 1.00 HIGH
+- final report contained exactly 1 parameter: include_deleted
+- evidence included $.deleted_included, $.items[2], the root key-set change, and $.items.__len changing from 2 to 3
+- -characterize=false was used, confirming contextual value-aware discovery remains independent of post-discovery characterization
+- the semantic request budget reached exactly 32/32 and was reported exhausted without exceeding the cap
+
+Context/value composition conclusion:
+- v0.4 externally validates that v0.3 candidate provenance and v0.4 value-aware discovery can compose in the real CLI path.
+- the related response explains why $.options.include_deleted was tested; the typed boolean true probe and paired random-name control independently establish why it was reported.
+- typed JSON boolean semantics are preserved rather than approximated with the string "true".
+
 Request-efficiency review:
 - the default 64-request semantic cap can be fully consumed even with a modest candidate set
 - no semantic profile values were removed solely to reduce request count because that would reduce recall for applications accepting only one representation such as true/false/1/0
