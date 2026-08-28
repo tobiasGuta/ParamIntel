@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/tobiasGuta/ParamIntel/internal/model"
@@ -42,6 +43,7 @@ func HarvestJSONResponse(requestBody, rawResponse []byte, maxDepth int) (Report,
 
 	var properties []property
 	collectProperties(responseRoot, "$", 0, maxDepth, &properties)
+	sort.Slice(properties, func(i, j int) bool { return properties[i].Path < properties[j].Path })
 
 	report := Report{ObservedProperties: len(properties)}
 	seen := map[string]struct{}{}
