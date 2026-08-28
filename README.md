@@ -8,6 +8,8 @@ Instead of treating any response difference as a valid parameter, ParamIntel tri
 
 v0.3 improves the part that happens before verification: finding application-specific parameter names worth testing. It can compare a JSON request with a related JSON API response, prioritize response-only properties, and then pass those exact candidates through the same v0.2 verification and negative-control model.
 
+By default, `-locations auto` always tests query candidates, adds form-body discovery for form-encoded requests, and adds JSON discovery whenever the captured body is a parseable JSON object. JSON structure is recognized even when the application uses a generic MIME type such as `text/plain`.
+
 ## What v0.3 adds
 
 - related-response candidate intelligence with `-context-response`;
