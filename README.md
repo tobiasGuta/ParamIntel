@@ -1,72 +1,189 @@
-# ParamIntel v0.4.0
+# ParamIntel v0.5.0
 
 ParamIntel is an evidence-oriented HTTP parameter discovery and behavioral-analysis tool for authorized web security testing and bug bounty research.
 
-Instead of treating any response difference as a valid parameter, ParamIntel asks a stronger question:
+Instead of treating any response difference as a valid parameter, ParamIntel asks two questions:
 
 > **Does this specific parameter produce reproducible application behavior that a random unknown parameter does not?**
+>
+> **Are the responses used to make that decision trustworthy application observations rather than known rate-limit/backoff responses?**
 
-v0.3 improved candidate acquisition: it can learn application-specific JSON parameter names from a related response. v0.4 improves probe selection: when a candidate cleanly fails the normal random-string discovery path, ParamIntel can try a small, bounded semantic value profile such as `true`, `false`, `1`, or `0` while preserving the same negative-control philosophy.
+The project has evolved in three deliberate layers:
 
-By default, `-locations auto` always tests query candidates, adds form-body discovery for form-encoded requests, and adds JSON discovery whenever the captured body is a parseable JSON object. JSON structure is recognized even when the application uses a generic MIME type such as `text/plain`.
+- **v0.3 — better candidate names:** derive high-signal JSON candidates from a related response;
+- **v0.4 — better candidate values:** rescue clean generic misses with a small curated semantic value profile;
+- **v0.5 — better evidence integrity:** prevent definite rate-limit/backoff responses from entering the comparator and optionally pace all requests with one global policy.
 
-## What v0.4 adds
+A reported parameter remains a **research lead**, not proof of a vulnerability. Authorization, business-logic impact, exploitability, and program rules still require manual validation.
 
-- bounded value-aware rescue for parameters that only react to specific semantic values;
-- `-value-aware=true|false` (default `true`);
-- `-value-aware-budget` (default `64`) as a hard cap on additional semantic requests;
-- same-value paired random-name controls, for example `debug=true` versus `zz_pi_<random>=true`;
-- repeated explicit-value verification without pooling evidence across different values;
-- deterministic rescue ordering;
-- conservative rescue eligibility: candidates that already showed generic candidate/control activity are not reinterpreted;
-- discovery provenance fields: `discovery_mode`, `discovery_value`, and `discovery_value_kind`;
-- typed JSON semantic discovery, so booleans and integers are sent as real JSON types;
-- composition between v0.3 context intelligence and v0.4 value-aware discovery.
+## What v0.5 adds
 
-v0.4 preserves:
+- HTTP `429 Too Many Requests` is treated as a definite rate-limit condition;
+- HTTP `503 Service Unavailable` is treated as server backoff only when a valid `Retry-After` header is present;
+- classified rate-limit/backoff responses are rejected before `Snapshot` construction and never reach behavioral comparison;
+- typed backoff errors preserve status and safe `Retry-After` metadata for diagnostics;
+- baseline, group probing, candidate verification, controls, value-aware rescue, and characterization all fail closed on known limiter responses;
+- a rate-limit abort exits non-zero and does not write a normal findings report;
+- `-delay` adds a global minimum interval between outbound request starts;
+- pacing is context-cancellable and race-safe;
+- `-delay 0` preserves the previous unpaced behavior;
+- no automatic retries or automatic `Retry-After` sleeping are performed in v0.5.0.
 
-- multi-request baselines;
-- semantic response comparison;
-- batch-and-recursive narrowing;
-- paired random-name negative controls;
-- repeated verification trials;
-- query, form, root JSON, and nested JSON discovery;
-- context-derived candidate provenance;
-- optional post-discovery type/value characterization;
-- explicit opt-in for repeated potentially state-changing requests.
+v0.5 does **not** weaken or replace the v0.4 discovery model. The existing batch/narrow, paired random-name controls, repeated verification, semantic rescue, provenance, and characterization behavior remains in place.
 
-## Detection model
+## Detection and evidence-integrity model
 
 ```mermaid
 flowchart TD
-    A["Raw authenticated request"] --> B["Multi-request baseline"]
+    A["Raw authorized request"] --> B["Shared paced HTTP client"]
     A --> C["Optional related JSON response"]
     C --> D["Request / response structural diff"]
     D --> E["Response-only exact candidates"]
 
-    B --> F["Candidate placement generation<br/>(context candidates first, then generic query/form/JSON candidates)"]
-    E --> F
+    B --> F["Multi-request baseline"]
+    F --> G["Candidate placement generation"]
+    E --> G
 
-    F --> G["Batch + recursive narrowing with random-string probes"]
-    G --> H["Individual generic verification"]
-    H --> I{"Confirmed?"}
-    I -->|Yes| J["Paired random-name control + confidence"]
-    I -->|Clean miss| K{"Conservative semantic profile available?"}
-    K -->|Yes| L["Bounded value-aware rescue"]
-    L --> M["Same-value random-name control"]
-    M --> N["Repeated explicit-value verification"]
-    J --> O["Confirmed parameter + provenance"]
-    N --> O
-    O --> P["Optional type/value characterization"]
+    G --> H["Batch + recursive narrowing with random-string probes"]
+    H --> I["Individual generic verification"]
+    I --> J{"Confirmed?"}
+    J -->|Yes| K["Paired random-name control + confidence"]
+    J -->|Clean miss| L{"Conservative semantic profile available?"}
+    L -->|Yes| M["Bounded value-aware rescue"]
+    M --> N["Same-value random-name control"]
+    N --> O["Repeated explicit-value verification"]
+    K --> P["Confirmed parameter + provenance"]
+    O --> P
+    P --> Q["Optional characterization"]
+
+    B --> R{"HTTP response trustworthy?"}
+    R -->|normal| S["Snapshot / comparator"]
+    R -->|429 or definite 503 backoff| T["Typed backoff error"]
+    T --> U["Abort scan; no normal report"]
 ```
 
-A reported parameter is a **research lead**, not proof of a vulnerability. Authorization, business-logic impact, and exploitability still require manual validation within program scope.
+The important v0.5 invariant is:
 
-## Why value-aware discovery matters
+> **A response known to be rate-limited or explicitly server-backoff must never influence ParamIntel confidence or behavioral evidence.**
 
-Some parameters are real but ignore arbitrary values.
+## Rate-limit and backoff behavior
+
+### HTTP 429
+
+Every HTTP 429 is rejected as a rate-limit condition.
 
 For example:
+
+```text
+baseline = 200
+candidate = 429
+```
+
+ParamIntel does **not** treat the status difference as candidate behavior. The experiment is invalid because the candidate response is known to represent throttling rather than trustworthy application behavior.
+
+The CLI aborts with a diagnostic such as:
+
+```text
+error: rate limit detected: HTTP 429 (Retry-After: 2); response was not used as discovery evidence
+```
+
+### HTTP 503
+
+HTTP 503 alone can mean many things, so v0.5 deliberately stays conservative.
+
+```text
+503 + valid Retry-After
+→ server backoff
+→ response rejected from evidence
+
+503 without Retry-After
+→ ordinary application response
+
+503 + malformed Retry-After
+→ ordinary application response
+```
+
+### HTTP 403
+
+ParamIntel does not label an ordinary 403 as rate limiting. A 403 can represent authorization, WAF behavior, anti-bot behavior, or application logic and can therefore still be relevant behavioral evidence.
+
+### Retry-After
+
+Both standard forms are parsed:
+
+```text
+Retry-After: 10
+```
+
+and:
+
+```text
+Retry-After: Wed, 21 Oct 2015 07:28:00 GMT
+```
+
+Malformed values on a 429 remain visible as raw diagnostic metadata, but ParamIntel does not trust them for timing.
+
+## Global request pacing
+
+Use:
+
+```text
+-delay 250ms
+```
+
+The value is a **minimum interval between request starts**, not an unconditional sleep after every response.
+
+For example:
+
+```text
+request 1 starts at T0
+server takes 400ms
+-delay 250ms
+request 2 may start immediately after request 1 completes
+```
+
+because more than 250ms has already elapsed since the previous request start.
+
+But if the server responds in 20ms:
+
+```text
+request 1 starts at T0
+request 1 completes at T0 + 20ms
+request 2 waits roughly 230ms
+```
+
+The same policy applies globally to:
+
+- baseline samples;
+- group probes;
+- recursive narrowing;
+- candidate trials;
+- random-name controls;
+- value-aware screens and controls;
+- repeated semantic verification;
+- post-discovery characterization.
+
+Default:
+
+```text
+-delay 0
+```
+
+Negative delays are rejected before any HTTP request is sent.
+
+## No automatic retry in v0.5.0
+
+ParamIntel does not automatically retry requests after a 429/503-backoff response.
+
+This is intentional. POST, PUT, PATCH, DELETE, and other potentially state-changing requests already require explicit `-allow-state-changing` acknowledgement. Hidden automatic replays would create a new side-effect model and are outside the first rate-limit implementation.
+
+When evidence integrity is lost, v0.5 fails closed and asks the researcher to decide what to do next.
+
+## Value-aware discovery
+
+v0.4 behavior remains available unchanged.
+
+Some parameters ignore arbitrary values:
 
 ```text
 /api/users
@@ -82,14 +199,7 @@ For example:
 → baseline
 ```
 
-A generic random-string detector can miss this because:
-
-```text
-debug=<random-token>
-→ baseline
-```
-
-v0.4 keeps the normal random-string path first. If that path produces a clean miss and the candidate has a conservative semantic profile, ParamIntel can try:
+A random-string detector can miss `debug`, so after a **clean generic miss** ParamIntel can try a small curated semantic profile:
 
 ```text
 debug=true
@@ -99,57 +209,31 @@ zz_pi_<random>=true
 
 Only candidate-specific behavior proceeds to repeated verification.
 
-A value-aware finding can look like:
-
-```json
-{
-  "name": "debug",
-  "location": "query",
-  "discovery_mode": "value_aware",
-  "discovery_value": "true",
-  "discovery_value_kind": "string",
-  "confidence": 1.00,
-  "confidence_label": "high",
-  "candidate_changed": 3,
-  "candidate_trials": 3,
-  "random_control_changed": 0,
-  "random_control_trials": 3
-}
-```
-
-`-characterize=false` does **not** disable value-aware discovery. Discovery and characterization solve different problems.
-
-## Request-budget model
-
-Value-aware discovery can cost more requests, so v0.4 has a separate hard budget:
+Value-aware controls:
 
 ```text
+-value-aware=true
 -value-aware-budget 64
 ```
 
-The budget includes semantic screening, same-value controls, and repeated confirmation requests. ParamIntel reserves the complete repeated-verification cost before starting confirmation, so it never crosses the configured cap halfway through a finding.
-
-When the final allowed request consumes the budget, verbose output reports:
-
-```text
-semantic probe budget exhausted: 64/64 requests used
-```
-
-The default semantic profiles remain intentionally small. ParamIntel does not spray large business-state enum dictionaries automatically.
+The semantic budget is a hard request cap and reserves the complete repeated-verification cost before confirmation begins.
 
 Value-aware profiles are deliberately curated rather than exhaustive. They cover common high-signal parameter patterns, and new profiles should be added from demonstrated discovery gaps with regression evidence rather than speculative value dictionaries.
 
+`-characterize=false` does not disable value-aware discovery.
+
 ## Context intelligence + value-aware discovery
 
-v0.3 and v0.4 compose.
+A related JSON response can contribute application-specific candidate names without contributing attack values.
 
-Suppose the request already contains:
+Suppose the request contains:
 
 ```json
 {
   "options": {
     "page_size": 10
-  }
+  },
+  "items": []
 }
 ```
 
@@ -160,24 +244,20 @@ and a related response contains:
   "options": {
     "page_size": 10,
     "include_deleted": false
-  }
+  },
+  "items": []
 }
 ```
 
-Context intelligence can derive:
+ParamIntel can derive:
 
 ```text
 $.options.include_deleted
-```
-
-with provenance:
-
-```text
 source: context_response_only_json_property
 observed type: boolean
 ```
 
-If a random string does nothing but JSON boolean `true` changes behavior, v0.4 can discover it with a real JSON boolean while preserving the context source:
+If only typed JSON boolean `true` changes behavior, v0.4/v0.5 can preserve both layers of provenance:
 
 ```json
 {
@@ -198,18 +278,18 @@ If a random string does nothing but JSON boolean `true` changes behavior, v0.4 c
 }
 ```
 
-The observed response type is still provenance, not proof. Active candidate/control verification remains authoritative.
+The related response explains **why the candidate was tested**. Active candidate/control verification explains **why it was reported**.
 
 ## Context-intelligence boundary
 
-Context harvesting intentionally stays narrow:
+Context harvesting remains deliberately narrow:
 
-- only JSON property **keys** become contextual candidates;
-- string values in a response are never split into candidate words;
-- a nested response-only property is actionable only when its parent JSON object already exists in the request;
-- arrays are not traversed for insertion targets;
-- ParamIntel does not synthesize missing nested object scaffolding;
-- a context-derived property is still only a candidate until active verification passes.
+- only JSON property keys become contextual candidates;
+- response values are never split into candidate words;
+- nested response-only fields are actionable only when the request already contains their parent object;
+- arrays are not traversed as insertion targets;
+- missing object scaffolding is not synthesized;
+- contextual observation alone never creates a finding.
 
 ## Build
 
@@ -236,7 +316,7 @@ Confirm version:
 Expected:
 
 ```text
-ParamIntel v0.4.0
+ParamIntel v0.5.0
 ```
 
 ## Basic query discovery
@@ -260,19 +340,14 @@ Run:
   -baseline 5 `
   -trials 3 `
   -chunk 32 `
+  -delay 200ms `
   -verbose `
   -output .\findings.json
 ```
 
-Value-aware rescue is enabled by default. Disable it when you want strict v0.3-style behavior:
-
-```text
--value-aware=false
-```
+Use pacing only when it fits the authorized target/program rules. `-delay 0` disables intentional pacing.
 
 ## Context-response workflow
-
-Save the authorized request and a related response, then run:
 
 ```powershell
 .\paramintel.exe `
@@ -284,14 +359,13 @@ Save the authorized request and a related response, then run:
   -chunk 4 `
   -value-aware=true `
   -value-aware-budget 64 `
+  -delay 200ms `
   -allow-state-changing `
   -verbose `
   -output .\findings.json
 ```
 
-## Form and JSON discovery
-
-Locations:
+## Discovery locations
 
 ```text
 -locations auto
@@ -322,15 +396,13 @@ Examples include:
 - `format`: `json`, `xml`, `html`;
 - `sort` / `order`: `asc`, `desc`.
 
-For JSON parameters, boolean and integer profile values are sent as actual JSON types.
+For JSON parameters, boolean and integer values are sent as actual JSON types.
 
-Disable post-discovery characterization:
+Disable characterization:
 
 ```text
 -characterize=false
 ```
-
-This does not disable value-aware discovery.
 
 ## Safety guard for state-changing methods
 
@@ -346,7 +418,7 @@ Use this only after confirming authorization and side-effect risk.
 
 ## Verification
 
-Run:
+Automated release gates:
 
 ```bash
 go test ./...
@@ -354,19 +426,29 @@ go vet ./...
 go test -race ./...
 ```
 
-The v0.4 verification record also documents manual before/after acceptance where the same controlled `debug=true` endpoint produced `0 parameters` in v0.3 and a single high-confidence `debug` finding in v0.4.
+v0.5 additionally has a reproducible real-CLI acceptance lab covering:
+
+- a normal baseline followed by an active-probe 429;
+- a valid contextual candidate whose random-name control alone receives 429;
+- global `-delay 100ms` request-start pacing.
 
 See:
 
 ```text
 VERIFICATION.txt
-docs/v0.4-value-aware-discovery.md
+docs/v0.5-rate-limit-evidence-integrity.md
+labs/v0.5-rate-limit/README.md
 ```
+
+External Windows acceptance must be recorded before the v0.5 release PR is considered ready to merge.
 
 ## Known boundaries
 
-v0.4 deliberately does **not** add:
+v0.5 deliberately does **not** add:
 
+- automatic retry or automatic sleeping after `Retry-After`;
+- adaptive concurrency;
+- WAF/rate-limit inference from arbitrary 403 pages or response text;
 - cache-aware probe correlation;
 - server-side parameter-pollution mutation inside another parameter value;
 - missing-parent JSON object synthesis;
@@ -375,26 +457,28 @@ v0.4 deliberately does **not** add:
 - Burp/MCP integration;
 - broad business-state enum spraying.
 
-These require separate evidence and design rather than being folded into value-aware discovery.
+These require separate evidence and design rather than being folded into the current trust model.
 
 ## Project layout
 
 ```text
 cmd/paramintel/        CLI and safety boundary
-internal/baseline/    baseline collection and request sending
+internal/baseline/    baseline collection, send boundary, backoff classification
 internal/candidates/  generic candidate wordlists
 internal/compare/     semantic response comparison
 internal/confidence/  confidence scoring
 internal/contextintel/ structured request/response candidate intelligence
 internal/discovery/   placement, narrowing, verification, controls, semantic rescue
+internal/httppolicy/  shared request-start pacing policy
 internal/httpraw/     raw HTTP request parser
 internal/model/       shared evidence/result types
 internal/mutate/      query/form/JSON mutation engine
-internal/semantics/   type inference and conservative semantic value profiles
+internal/semantics/   type inference and curated semantic value profiles
+labs/                 reproducible local acceptance labs
 ```
 
 ## Scope and responsible use
 
-Use ParamIntel only on systems you own or are explicitly authorized to test. Respect bug bounty scope, rate limits, forbidden actions, and data-handling rules. ParamIntel discovers and characterizes inputs; it does not automatically claim that a discovered parameter is vulnerable.
+Use ParamIntel only on systems you own or are explicitly authorized to test. Respect bug bounty scope, published rate limits, forbidden actions, and data-handling rules. ParamIntel discovers and characterizes inputs; it does not automatically claim that a discovered parameter is vulnerable.
 
 Raw Burp requests and responses can contain session cookies, authorization headers, identifiers, and target data. Keep local research artifacts out of source control. The default `.gitignore` excludes `burprequests/`, `burpresponses/`, and `wordlists/` for this reason.
