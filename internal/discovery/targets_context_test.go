@@ -45,4 +45,17 @@ func TestBuildTargetsPrioritizesSeedAndPreservesItsProvenance(t *testing.T) {
 	if count != 1 {
 		t.Fatalf("context seed should suppress duplicate generic placement; count=%d targets=%+v", count, targets)
 	}
+
+	groups := groupTargets(targets, 64)
+	if len(groups) < 2 {
+		t.Fatalf("expected contextual and generic groups: %+v", groups)
+	}
+	if len(groups[0]) != 1 || groups[0][0].JSONPath() != "$.filters.limit" || len(groups[0][0].Sources) == 0 {
+		t.Fatalf("first group must contain only the contextual candidate: %+v", groups[0])
+	}
+	for _, candidate := range groups[1] {
+		if len(candidate.Sources) != 0 {
+			t.Fatalf("contextual candidate leaked into generic group: %+v", groups[1])
+		}
+	}
 }
