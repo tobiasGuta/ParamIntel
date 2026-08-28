@@ -19,7 +19,7 @@ func newSemanticBudget(limit int) *semanticBudget {
 	if limit < 0 {
 		limit = 0
 	}
-	return &semanticBudget{remaining: limit}
+	return &semanticBudget{remaining: limit, exhausted: limit == 0}
 }
 
 func (b *semanticBudget) reserve(requests int) bool {
@@ -35,6 +35,9 @@ func (b *semanticBudget) reserve(requests int) bool {
 	}
 	b.remaining -= requests
 	b.used += requests
+	if b.remaining == 0 {
+		b.exhausted = true
+	}
 	return true
 }
 
