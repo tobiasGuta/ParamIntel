@@ -67,7 +67,7 @@ func TestScanValueAwareRescuesDebugAndRecordsProvenance(t *testing.T) {
 	if !strings.Contains(logs.String(), `discovery: value-aware using "true" (string)`) {
 		t.Fatalf("missing value-aware diagnostic: %s", logs.String())
 	}
-	if !strings.Contains(logs.String(), "semantic requests used: 8/8") {
+	if !strings.Contains(logs.String(), "semantic probe budget exhausted: 8/8 requests used") {
 		t.Fatalf("unexpected budget diagnostic: %s", logs.String())
 	}
 }
