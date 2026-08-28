@@ -1,6 +1,6 @@
 ParamIntel v0.5.0 verification
 Date: 2026-08-28
-Status: automated implementation acceptance PASS; Windows Lab A PASS; Windows Lab B PASS; Windows Lab C CLI-side PASS; Lab C server timestamps PENDING
+Status: PASS — automated implementation acceptance and Windows external CLI acceptance complete
 
 Release goal
 ------------
@@ -45,7 +45,7 @@ Slice 3 — discovery-phase evidence integrity: COMPLETE
 - characterization 429 after a valid discovery aborts the scan rather than returning a partially characterized normal result
 - real CLI subprocess regression proves rate-limit abort exits non-zero and does not create the requested findings file
 
-Slice 4 — release hardening: IN PROGRESS
+Slice 4 — release hardening: COMPLETE
 - CLI version bumped to ParamIntel v0.5.0
 - release version is pinned by an automated test
 - README updated for the v0.5 evidence-integrity model
@@ -53,11 +53,11 @@ Slice 4 — release hardening: IN PROGRESS
 - reproducible Windows acceptance lab added under labs/v0.5-rate-limit
 - Windows Lab A externally accepted
 - Windows Lab B externally accepted
-- Windows Lab C CLI behavior externally accepted; server timestamp spacing still pending review
+- Windows Lab C externally accepted, including server-side request-start timing
 
 Automated gates
 ---------------
-Exact release-hardening repository head before external-result documentation:
+Exact release-hardening repository head before final external-result documentation:
   32f15d3f0e024dbe158033cc3ce8a578b8bbb6fb
 
 GitHub Actions run #93:
@@ -68,6 +68,8 @@ GitHub Actions run #93:
 - Windows amd64 cross-build: PASS
 
 Earlier exact heads also passed the same full CI gates after Slice 1, Slice 2, and Slice 3.
+
+A final exact-head CI run is required after this verification record is committed and before the pull request is opened.
 
 Backoff classification acceptance
 ---------------------------------
@@ -172,7 +174,7 @@ Conclusion:
 - the real Windows CLI preserved the fail-closed evidence-integrity boundary
 
 Lab C — pacing
-Status: CLI-SIDE PASS; SERVER TIMESTAMP REVIEW PENDING
+Status: PASS
 Observed Windows CLI behavior:
 - baseline: 3 samples
 - baseline status: 200 stable
@@ -186,10 +188,23 @@ Observed Windows CLI behavior:
 - process exit code: 0
 - Test-Path v05-pace-findings.json returned True
 
-Remaining Lab C criterion:
-- review the lab-server [pace] request-start lines and confirm consecutive starts are approximately >=100ms rather than back-to-back
+Observed acceptance-lab server request-start timing:
+- request 1: start
+- request 2: gap=100ms
+- request 3: gap=100ms
+- request 4: gap=101ms
 
-Do not mark full Windows external acceptance PASS until the Lab C server timing lines have been reviewed.
+Conclusion:
+- real Windows CLI traffic respected the configured 100ms minimum request-start spacing
+- pacing applied during baseline and continued into active discovery using the same shared client policy
+- pacing did not change the baseline-like endpoint outcome or create false findings
+
+External acceptance conclusion
+------------------------------
+All three v0.5 Windows acceptance cases PASS:
+- known mid-scan limiter behavior aborts before becoming discovery evidence
+- asymmetric candidate/control limiter behavior invalidates the experiment and emits no normal findings report
+- global request-start pacing is observable at approximately the configured interval in the real CLI path
 
 Preserved v0.4 regression model
 -------------------------------
