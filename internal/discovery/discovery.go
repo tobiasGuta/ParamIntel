@@ -27,6 +27,12 @@ type Engine struct {
 }
 
 func (e Engine) Scan(ctx context.Context, tmpl model.RequestTemplate, profile model.BaselineProfile, words []string) ([]model.ParameterResult, error) {
+	return e.ScanWithCandidates(ctx, tmpl, profile, words, nil)
+}
+
+// ScanWithCandidates preserves the v0.2 discovery/verifier pipeline while
+// allowing high-signal, exact candidate placements to be tested first.
+func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTemplate, profile model.BaselineProfile, words []string, seeded []model.Candidate) ([]model.ParameterResult, error) {
 	cfg := e.Config
 	if cfg.ChunkSize <= 0 {
 		cfg.ChunkSize = 64
@@ -41,12 +47,15 @@ func (e Engine) Scan(ctx context.Context, tmpl model.RequestTemplate, profile mo
 		cfg.MaxJSONDepth = 3
 	}
 
-	targets, err := buildTargets(tmpl, words, cfg.Locations, cfg.MaxJSONDepth)
+	targets, err := buildTargetsWithSeeds(tmpl, words, cfg.Locations, cfg.MaxJSONDepth, seeded)
 	if err != nil {
 		return nil, err
 	}
 	groups := groupTargets(targets, cfg.ChunkSize)
 	e.verbosef("[*] Active locations: %s\n", strings.Join(targetLocations(targets), ","))
+	if len(seeded) > 0 {
+		e.verbosef("[*] Prioritized %d contextual candidate placements\n", len(seeded))
+	}
 	e.verbosef("[*] Testing %d candidate placements in %d initial groups\n", len(targets), len(groups))
 
 	var survivors []model.Candidate
@@ -118,6 +127,13 @@ func (e Engine) logVerification(r model.ParameterResult, accepted bool, minConfi
 		label = r.JSONPath
 	}
 	e.verbosef("%s %s (%s)\n", prefix, label, r.Location)
+	for _, source := range r.CandidateSources {
+		e.verbosef("    source: %s %s", source.Source, source.Path)
+		if source.ObservedType != "" {
+			e.verbosef(" (observed %s)", source.ObservedType)
+		}
+		e.verbosef("\n")
+	}
 	e.verbosef("    candidate: changed %d/%d\n", r.CandidateChanged, r.CandidateTrials)
 	e.verbosef("    control:   changed %d/%d\n", r.RandomControlChanged, r.RandomControlTrials)
 	e.verbosef("    confidence: %.0f%% %s\n", float64(r.Confidence)*100, upperLabel(r.ConfidenceLabel))
