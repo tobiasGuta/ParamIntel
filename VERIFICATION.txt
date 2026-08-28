@@ -1,6 +1,6 @@
 ParamIntel v0.5.0 verification
 Date: 2026-08-28
-Status: automated implementation acceptance PASS; Windows Lab B PASS; Windows Lab C CLI-side PASS; Lab A and Lab C server timestamps PENDING
+Status: automated implementation acceptance PASS; Windows Lab A PASS; Windows Lab B PASS; Windows Lab C CLI-side PASS; Lab C server timestamps PENDING
 
 Release goal
 ------------
@@ -51,9 +51,9 @@ Slice 4 — release hardening: IN PROGRESS
 - README updated for the v0.5 evidence-integrity model
 - CHANGELOG updated for v0.5.0
 - reproducible Windows acceptance lab added under labs/v0.5-rate-limit
+- Windows Lab A externally accepted
 - Windows Lab B externally accepted
 - Windows Lab C CLI behavior externally accepted; server timestamp spacing still pending review
-- Windows Lab A still pending
 
 Automated gates
 ---------------
@@ -130,14 +130,23 @@ Automated tests prove:
 External Windows CLI acceptance
 -------------------------------
 Lab A — mid-scan 429
-Status: PENDING
-Criteria:
-- baseline completes normally
-- active query probe receives 429 Retry-After: 2
-- ParamIntel aborts at first 429
-- diagnostic says response was not used as discovery evidence
-- process exits non-zero
-- requested normal findings file is absent
+Status: PASS
+Observed Windows CLI behavior:
+- baseline: 3 samples
+- baseline status: 200 stable
+- baseline body length: 19-19 bytes
+- stable JSON paths: 4
+- active location: query
+- total candidate placements: 26 in 1 initial group
+- active group probe aborted with:
+  probe group query:account_id: rate limit detected: HTTP 429 (Retry-After: 2); response was not used as discovery evidence
+- process exit code: 1
+- Test-Path v05-mid-scan-findings.json returned False
+
+Conclusion:
+- baseline evidence remained valid before rate limiting began
+- the first classified mid-scan 429 aborted group probing rather than becoming narrowing evidence
+- no normal findings report was emitted after evidence integrity was lost
 
 Lab B — asymmetric candidate/control limiter
 Status: PASS
@@ -180,7 +189,7 @@ Observed Windows CLI behavior:
 Remaining Lab C criterion:
 - review the lab-server [pace] request-start lines and confirm consecutive starts are approximately >=100ms rather than back-to-back
 
-Do not mark full Windows external acceptance PASS until Lab A and the Lab C server timing lines have been reviewed.
+Do not mark full Windows external acceptance PASS until the Lab C server timing lines have been reviewed.
 
 Preserved v0.4 regression model
 -------------------------------
