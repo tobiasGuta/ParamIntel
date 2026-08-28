@@ -1,5 +1,22 @@
 # Changelog
 
+## v0.4.0
+
+- Added bounded value-aware discovery for parameters whose behavior only appears for specific semantic values such as `debug=true`.
+- Preserved the existing random-string batch/narrow discovery path as the first-pass detector; value-aware discovery is a rescue pass rather than a replacement.
+- Added paired same-value random-name controls so semantic probes compare, for example, `debug=true` against `zz_pi_<random>=true`.
+- Added repeated explicit-value verification without pooling evidence across different semantic values.
+- Added `-value-aware` (default `true`) and `-value-aware-budget` (default `64`) CLI controls.
+- Added a hard semantic request budget that reserves complete repeated-verification cost before starting confirmation and never exceeds the configured cap.
+- Added deterministic rescue ordering and conservative eligibility: candidates with generic candidate/control activity are not reinterpreted by semantic rescue; only clean misses are eligible.
+- Added finding provenance fields `discovery_mode`, `discovery_value`, and `discovery_value_kind`.
+- Value-aware discovery remains independent of `-characterize`; `-characterize=false` still permits semantic discovery.
+- Added typed JSON semantic discovery, including real JSON booleans and integers rather than string approximations.
+- Added composition coverage showing a nested context-derived JSON candidate such as `$.options.include_deleted` can retain response-context provenance and be rescued with typed boolean `true`.
+- Exact budget usage now reports as exhausted when the final allowed request consumes the remaining budget.
+- Added regression coverage for value-sensitive discovery, same-value generic-noise rejection, insufficient-budget refusal, deterministic budget ordering, and context-plus-value-aware composition.
+- Manual Windows acceptance confirmed the same controlled `debug=true` endpoint that v0.3 reported as `0 parameters` is found by v0.4 at 3/3 candidate changes, 0/3 random-control changes, and `1.00 HIGH` confidence.
+
 ## v0.3.0
 
 - Added `-context-response` for deriving high-signal JSON parameter candidates from a related API response.
