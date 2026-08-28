@@ -36,8 +36,9 @@ func HarvestJSONResponse(requestBody, rawResponse []byte, maxDepth int) (Report,
 		return Report{}, fmt.Errorf("context response: %w", err)
 	}
 
-	requestPaths := map[string]struct{}{"$": {}}
-	collectObjectPaths(requestRoot, "$", 0, maxDepth, requestPaths)
+	requestObjects := map[string]struct{}{"$": {}}
+	requestProperties := map[string]struct{}{}
+	collectRequestPaths(requestRoot, "$", 0, maxDepth, requestObjects, requestProperties)
 
 	var properties []property
 	collectProperties(responseRoot, "$", 0, maxDepth, &properties)
@@ -45,11 +46,11 @@ func HarvestJSONResponse(requestBody, rawResponse []byte, maxDepth int) (Report,
 	report := Report{ObservedProperties: len(properties)}
 	seen := map[string]struct{}{}
 	for _, p := range properties {
-		if _, ok := requestPaths[p.Path]; ok {
+		if _, ok := requestProperties[p.Path]; ok {
 			report.SkippedExisting++
 			continue
 		}
-		if _, ok := requestPaths[p.Parent]; !ok {
+		if _, ok := requestObjects[p.Parent]; !ok {
 			report.SkippedNoParent++
 			continue
 		}
@@ -108,18 +109,18 @@ func responseBody(raw []byte) []byte {
 	return trimmed
 }
 
-func collectObjectPaths(obj map[string]any, path string, depth, maxDepth int, out map[string]struct{}) {
-	if depth >= maxDepth {
+func collectRequestPaths(obj map[string]any, parent string, depth, maxDepth int, objects, properties map[string]struct{}) {
+	if depth > maxDepth {
 		return
 	}
 	for name, value := range obj {
+		path := join(parent, name)
+		properties[path] = struct{}{}
 		child, ok := value.(map[string]any)
-		if !ok {
-			continue
+		if ok && depth < maxDepth {
+			objects[path] = struct{}{}
+			collectRequestPaths(child, path, depth+1, maxDepth, objects, properties)
 		}
-		childPath := join(path, name)
-		out[childPath] = struct{}{}
-		collectObjectPaths(child, childPath, depth+1, maxDepth, out)
 	}
 }
 
