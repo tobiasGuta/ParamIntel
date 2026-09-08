@@ -41,7 +41,7 @@ func NewGeminiProvider(cfg GeminiConfig) (*GeminiProvider, error) {
 	}
 	client := cfg.Client
 	if client == nil {
-		client = &http.Client{Timeout: 20 * time.Second}
+		client = &http.Client{Timeout: 60 * time.Second}
 	}
 	return &GeminiProvider{
 		apiKey:   cfg.APIKey,
@@ -74,6 +74,7 @@ func (p *GeminiProvider) Suggest(ctx context.Context, input Input, limit int) ([
 		Store:             false,
 		GenerationConfig: geminiGenerationConfig{
 			MaxOutputTokens: 1200,
+			ThinkingLevel:   "low",
 		},
 		ResponseFormat: geminiResponseFormat(),
 	}
@@ -142,7 +143,8 @@ type geminiRequest struct {
 }
 
 type geminiGenerationConfig struct {
-	MaxOutputTokens int `json:"max_output_tokens"`
+	MaxOutputTokens int    `json:"max_output_tokens"`
+	ThinkingLevel   string `json:"thinking_level,omitempty"`
 }
 
 func geminiResponseFormat() map[string]any {
