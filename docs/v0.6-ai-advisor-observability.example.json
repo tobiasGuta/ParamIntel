@@ -3,6 +3,7 @@
     "provider": "gemini",
     "model": "gemini-3.8-flash",
     "input_policy": "sanitized_structure_only",
+    "context_source": "baseline_response",
     "suggested_candidates": 2,
     "accepted_candidates": 1,
     "rejected_candidates": 1,
@@ -21,6 +22,7 @@
         "confidence": 1.00,
         "candidate_changed": 3,
         "candidate_trials": 3,
+        "random_control_changed": 0,
         "random_control_trials": 3
       },
       {
