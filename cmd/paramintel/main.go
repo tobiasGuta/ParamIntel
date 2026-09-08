@@ -133,13 +133,7 @@ func main() {
 		advisorResult, err := aiadvisor.Generate(ctx, provider, advisorInput, aiCandidateBudget)
 		fatal(err)
 		seeded = append(seeded, advisorResult.Candidates...)
-		aiSummary = &model.AIAdvisorSummary{
-			Provider:            advisorResult.Provider,
-			Model:               advisorResult.Model,
-			InputPolicy:         "sanitized_structure_only",
-			SuggestedCandidates: advisorResult.SuggestedCount,
-			AcceptedCandidates:  advisorResult.AcceptedCount,
-		}
+		aiSummary = buildAIAdvisorSummary(advisorResult)
 		if verbose {
 			fmt.Printf("[*] AI Candidate Advisor\n")
 			fmt.Printf("    provider: %s\n", advisorResult.Provider)
@@ -181,6 +175,10 @@ func main() {
 	}}
 	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
 	fatal(err)
+	finalizeAIAdvisorSummary(aiSummary, params)
+	if verbose && aiSummary != nil {
+		printAIAdvisorAudit(aiSummary)
+	}
 	report := model.ScanReport{
 		Version:    version,
 		Target:     tmpl.URL,
