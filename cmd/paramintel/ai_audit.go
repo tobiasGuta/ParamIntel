@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/tobiasGuta/ParamIntel/internal/aiadvisor"
+	"github.com/tobiasGuta/ParamIntel/internal/confidence"
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
 
@@ -54,8 +55,8 @@ func finalizeAIAdvisorSummary(summary *model.AIAdvisorSummary, params []model.Pa
 			}
 			audit.Verified = true
 			audit.DiscoveryOutcome = "verified"
-			confidence := result.Confidence
-			audit.Confidence = &confidence
+			confidenceScore := result.Confidence
+			audit.Confidence = &confidenceScore
 			audit.CandidateChanged = result.CandidateChanged
 			audit.CandidateTrials = result.CandidateTrials
 			audit.RandomControlChanged = result.RandomControlChanged
@@ -100,7 +101,7 @@ func printAIAdvisorAudit(summary *model.AIAdvisorSummary) {
 				audit.RandomControlChanged,
 				audit.RandomControlTrials,
 				float64(*audit.Confidence)*100,
-				strings.ToUpper(confidenceLabel(float64(*audit.Confidence))),
+				strings.ToUpper(confidence.Label(float64(*audit.Confidence))),
 			)
 		} else {
 			fmt.Printf("        admission: admitted\n")
@@ -140,15 +141,4 @@ func joinAuditJSONPath(parent, name string) string {
 		return "$." + name
 	}
 	return parent + "." + name
-}
-
-func confidenceLabel(score float64) string {
-	switch {
-	case score >= .85:
-		return "high"
-	case score >= .60:
-		return "medium"
-	default:
-		return "low"
-	}
 }
