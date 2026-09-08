@@ -56,11 +56,15 @@ func finalizeAIAdvisorSummary(summary *model.AIAdvisorSummary, params []model.Pa
 			audit.Verified = true
 			audit.DiscoveryOutcome = "verified"
 			confidenceScore := result.Confidence
+			candidateChanged := result.CandidateChanged
+			candidateTrials := result.CandidateTrials
+			randomControlChanged := result.RandomControlChanged
+			randomControlTrials := result.RandomControlTrials
 			audit.Confidence = &confidenceScore
-			audit.CandidateChanged = result.CandidateChanged
-			audit.CandidateTrials = result.CandidateTrials
-			audit.RandomControlChanged = result.RandomControlChanged
-			audit.RandomControlTrials = result.RandomControlTrials
+			audit.CandidateChanged = &candidateChanged
+			audit.CandidateTrials = &candidateTrials
+			audit.RandomControlChanged = &randomControlChanged
+			audit.RandomControlTrials = &randomControlTrials
 			summary.VerifiedCandidates++
 			break
 		}
@@ -96,10 +100,10 @@ func printAIAdvisorAudit(summary *model.AIAdvisorSummary) {
 		} else if audit.Verified {
 			fmt.Printf("        admission: admitted\n")
 			fmt.Printf("        discovery: verified (%d/%d candidate, %d/%d control, %.0f%% %s)\n",
-				audit.CandidateChanged,
-				audit.CandidateTrials,
-				audit.RandomControlChanged,
-				audit.RandomControlTrials,
+				intValue(audit.CandidateChanged),
+				intValue(audit.CandidateTrials),
+				intValue(audit.RandomControlChanged),
+				intValue(audit.RandomControlTrials),
 				float64(*audit.Confidence)*100,
 				strings.ToUpper(confidence.Label(float64(*audit.Confidence))),
 			)
@@ -141,4 +145,11 @@ func joinAuditJSONPath(parent, name string) string {
 		return "$." + name
 	}
 	return parent + "." + name
+}
+
+func intValue(v *int) int {
+	if v == nil {
+		return 0
+	}
+	return *v
 }
