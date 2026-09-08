@@ -144,10 +144,10 @@ type AIAdvisorCandidateAudit struct {
 	Verified             bool             `json:"verified"`
 	DiscoveryOutcome     string           `json:"discovery_outcome"`
 	Confidence           *ConfidenceScore `json:"confidence,omitempty"`
-	CandidateChanged     int              `json:"candidate_changed,omitempty"`
-	CandidateTrials      int              `json:"candidate_trials,omitempty"`
-	RandomControlChanged int              `json:"random_control_changed,omitempty"`
-	RandomControlTrials  int              `json:"random_control_trials,omitempty"`
+	CandidateChanged     *int             `json:"candidate_changed,omitempty"`
+	CandidateTrials      *int             `json:"candidate_trials,omitempty"`
+	RandomControlChanged *int             `json:"random_control_changed,omitempty"`
+	RandomControlTrials  *int             `json:"random_control_trials,omitempty"`
 }
 
 type AIAdvisorSummary struct {
