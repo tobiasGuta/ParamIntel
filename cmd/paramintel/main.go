@@ -53,7 +53,7 @@ func main() {
 	flag.StringVar(&aiProviderName, "ai-provider", aiadvisor.ProviderGemini, "AI provider adapter (currently: gemini)")
 	flag.StringVar(&aiModel, "ai-model", "", "AI model override; provider default if empty")
 	flag.StringVar(&aiAPIKeyEnv, "ai-api-key-env", "", "environment variable containing the AI provider API key; provider default if empty")
-	flag.StringVar(&aiContextResponsePath, "ai-context-response", "", "optional raw HTTP response or JSON body used only as sanitized AI structural context; defaults to -context-response when set")
+	flag.StringVar(&aiContextResponsePath, "ai-context-response", "", "optional raw HTTP response or JSON body override for sanitized AI context; a collected baseline response is used by default")
 	flag.IntVar(&aiCandidateBudget, "ai-candidate-budget", 12, "maximum AI-suggested candidates admitted to discovery")
 	flag.DurationVar(&aiTimeout, "ai-timeout", 60*time.Second, "AI provider request timeout")
 
@@ -103,7 +103,8 @@ func main() {
 	}
 
 	ctx := context.Background()
-	var aiSummary *model.AIAdvisorSummary
+	var aiProvider aiadvisor.Provider
+	var aiOverrideRaw []byte
 	if aiAdvisorEnabled {
 		providerEnv := strings.TrimSpace(aiAPIKeyEnv)
 		if providerEnv == "" {
@@ -114,40 +115,18 @@ func main() {
 		if apiKey == "" {
 			fatal(fmt.Errorf("AI provider %q requires an API key in environment variable %s", aiProviderName, providerEnv))
 		}
-
-		aiRaw := contextRaw
 		if aiContextResponsePath != "" {
-			aiRaw, err = os.ReadFile(aiContextResponsePath)
+			aiOverrideRaw, err = os.ReadFile(aiContextResponsePath)
 			fatal(err)
 		}
 		aiClient := &http.Client{Timeout: aiTimeout}
-		provider, err := aiadvisor.NewProvider(aiadvisor.ProviderConfig{
+		aiProvider, err = aiadvisor.NewProvider(aiadvisor.ProviderConfig{
 			Provider: aiProviderName,
 			APIKey:   apiKey,
 			Model:    aiModel,
 			Client:   aiClient,
 		})
 		fatal(err)
-		advisorInput, err := aiadvisor.BuildInput(tmpl, aiRaw, locations, jsonDepth)
-		fatal(err)
-		// Only the static built-ins are shared with the provider as exclusions.
-		// A user-supplied wordlist remains local, but all loaded deterministic
-		// names participate in the local admission gate so AI cannot claim
-		// coverage ParamIntel already had.
-		advisorInput.ExcludedCandidateNames = append([]string(nil), candidates.Builtin...)
-		advisorInput.LocalCoveredNames = append([]string(nil), words...)
-		advisorResult, err := aiadvisor.Generate(ctx, provider, advisorInput, aiCandidateBudget)
-		fatal(err)
-		seeded = append(seeded, advisorResult.Candidates...)
-		aiSummary = buildAIAdvisorSummary(advisorResult)
-		if verbose {
-			fmt.Printf("[*] AI Candidate Advisor\n")
-			fmt.Printf("    provider: %s\n", advisorResult.Provider)
-			fmt.Printf("    model: %s\n", advisorResult.Model)
-			fmt.Printf("    input policy: sanitized structure only\n")
-			fmt.Printf("    suggested candidates: %d\n", advisorResult.SuggestedCount)
-			fmt.Printf("    accepted candidate hypotheses: %d\n", advisorResult.AcceptedCount)
-		}
 	}
 
 	client := &http.Client{
@@ -155,7 +134,7 @@ func main() {
 		Transport:     httppolicy.NewPacedTransport(http.DefaultTransport, delay),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	profile, err := baseline.Build(ctx, client, tmpl, baselineN)
+	profile, baselineSnapshot, err := baseline.BuildWithSnapshot(ctx, client, tmpl, baselineN)
 	fatal(err)
 	if verbose {
 		fmt.Printf("[+] Baseline ready\n")
@@ -167,6 +146,34 @@ func main() {
 			fmt.Printf("[*] Request pacing: minimum %s between request starts\n", delay)
 		}
 	}
+
+	var aiSummary *model.AIAdvisorSummary
+	if aiAdvisorEnabled {
+		aiRaw, aiContextSource := selectAIContext(baselineSnapshot, aiOverrideRaw, aiContextResponsePath != "")
+		advisorInput, err := aiadvisor.BuildInput(tmpl, aiRaw, locations, jsonDepth)
+		fatal(err)
+		// Only the static built-ins are shared with the provider as exclusions.
+		// A user-supplied wordlist remains local, but all loaded deterministic
+		// names participate in the local admission gate so AI cannot claim
+		// coverage ParamIntel already had.
+		advisorInput.ExcludedCandidateNames = append([]string(nil), candidates.Builtin...)
+		advisorInput.LocalCoveredNames = append([]string(nil), words...)
+		advisorResult, err := aiadvisor.Generate(ctx, aiProvider, advisorInput, aiCandidateBudget)
+		fatal(err)
+		seeded = append(seeded, advisorResult.Candidates...)
+		aiSummary = buildAIAdvisorSummary(advisorResult)
+		aiSummary.ContextSource = aiContextSource
+		if verbose {
+			fmt.Printf("[*] AI Candidate Advisor\n")
+			fmt.Printf("    provider: %s\n", advisorResult.Provider)
+			fmt.Printf("    model: %s\n", advisorResult.Model)
+			fmt.Printf("    input policy: sanitized structure only\n")
+			fmt.Printf("    context source: %s\n", aiContextSource)
+			fmt.Printf("    suggested candidates: %d\n", advisorResult.SuggestedCount)
+			fmt.Printf("    accepted candidate hypotheses: %d\n", advisorResult.AcceptedCount)
+		}
+	}
+
 	engine := discovery.Engine{Client: client, Config: discovery.Config{
 		ChunkSize:        chunk,
 		Trials:           trials,
