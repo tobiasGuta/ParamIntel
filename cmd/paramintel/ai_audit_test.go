@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/tobiasGuta/ParamIntel/internal/aiadvisor"
@@ -37,14 +39,26 @@ func TestAIAdvisorSummaryTracksAdmissionAndVerification(t *testing.T) {
 	if summary.VerifiedCandidates != 1 {
 		t.Fatalf("verified=%d", summary.VerifiedCandidates)
 	}
-	if !summary.CandidateAudit[0].Verified || summary.CandidateAudit[0].DiscoveryOutcome != "verified" {
-		t.Fatalf("audit=%+v", summary.CandidateAudit[0])
+	audit := summary.CandidateAudit[0]
+	if !audit.Verified || audit.DiscoveryOutcome != "verified" {
+		t.Fatalf("audit=%+v", audit)
 	}
-	if summary.CandidateAudit[0].Confidence == nil || float64(*summary.CandidateAudit[0].Confidence) != 1 {
-		t.Fatalf("confidence=%v", summary.CandidateAudit[0].Confidence)
+	if audit.Confidence == nil || float64(*audit.Confidence) != 1 {
+		t.Fatalf("confidence=%v", audit.Confidence)
+	}
+	if audit.CandidateChanged == nil || *audit.CandidateChanged != 3 || audit.RandomControlChanged == nil || *audit.RandomControlChanged != 0 {
+		t.Fatalf("verification counts=%+v", audit)
 	}
 	if summary.CandidateAudit[1].Tested || summary.CandidateAudit[1].DiscoveryOutcome != "locally_rejected" {
 		t.Fatalf("rejected audit=%+v", summary.CandidateAudit[1])
+	}
+
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"random_control_changed":0`) {
+		t.Fatalf("zero control count must remain explicit: %s", encoded)
 	}
 }
 
