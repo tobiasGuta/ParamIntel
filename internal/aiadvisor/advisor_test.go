@@ -46,14 +46,63 @@ func TestAcceptSuggestionsValidatesAndPrioritizes(t *testing.T) {
 	}
 }
 
-func TestGenerateKeepsProviderMetadata(t *testing.T) {
-	p := fakeProvider{suggestions: []Suggestion{{Name: "debug", Location: "query", Priority: 70, Reason: "test"}}}
-	result, err := Generate(context.Background(), p, Input{ActiveLocations: []string{"query"}}, 1)
+func TestGenerateKeepsProviderMetadataAndAdmissionAudit(t *testing.T) {
+	p := fakeProvider{suggestions: []Suggestion{
+		{Name: "debug", Location: "query", Priority: 70, Reason: "test"},
+		{Name: "bad name!", Location: "query", Priority: 90, Reason: "invalid"},
+	}}
+	result, err := Generate(context.Background(), p, Input{ActiveLocations: []string{"query"}}, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Provider != "fake" || result.Model != "fake-model" || result.SuggestedCount != 1 || result.AcceptedCount != 1 {
+	if result.Provider != "fake" || result.Model != "fake-model" || result.SuggestedCount != 2 || result.AcceptedCount != 1 {
 		t.Fatalf("result=%+v", result)
+	}
+	if len(result.Audit) != 2 {
+		t.Fatalf("audit=%+v", result.Audit)
+	}
+	var admitted, rejected *SuggestionAudit
+	for i := range result.Audit {
+		a := &result.Audit[i]
+		switch a.Admission {
+		case AdmissionAdmitted:
+			admitted = a
+		case AdmissionRejected:
+			rejected = a
+		}
+	}
+	if admitted == nil || admitted.Name != "debug" {
+		t.Fatalf("admitted=%+v", admitted)
+	}
+	if rejected == nil || rejected.Name != "bad name!" || rejected.RejectionReason != "invalid_name" {
+		t.Fatalf("rejected=%+v", rejected)
+	}
+}
+
+func TestAdmissionAuditExplainsLocalRejections(t *testing.T) {
+	input := Input{
+		ActiveLocations: []string{model.LocationQuery, model.LocationJSON},
+		QueryKeys:       []string{"existing"},
+		JSONParents:     []string{"$"},
+	}
+	_, audit := evaluateSuggestions(input, []Suggestion{
+		{Name: "existing", Location: "query", Priority: 100},
+		{Name: "wrong_parent", Location: "json", JSONParent: "$.missing", Priority: 90},
+		{Name: "header_candidate", Location: "header", Priority: 80},
+		{Name: "good", Location: "query", Priority: 70},
+		{Name: "good", Location: "query", Priority: 60},
+	}, 5)
+
+	reasons := map[string]bool{}
+	for _, item := range audit {
+		if item.RejectionReason != "" {
+			reasons[item.RejectionReason] = true
+		}
+	}
+	for _, want := range []string{"already_present", "invalid_json_parent", "inactive_location", "duplicate"} {
+		if !reasons[want] {
+			t.Fatalf("missing rejection reason %q in %+v", want, audit)
+		}
 	}
 }
 
