@@ -2,6 +2,8 @@ package aiadvisor
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/tobiasGuta/ParamIntel/internal/model"
@@ -81,14 +83,16 @@ func TestGenerateKeepsProviderMetadataAndAdmissionAudit(t *testing.T) {
 
 func TestAdmissionAuditExplainsLocalRejections(t *testing.T) {
 	input := Input{
-		ActiveLocations: []string{model.LocationQuery, model.LocationJSON},
-		QueryKeys:       []string{"existing"},
-		JSONParents:     []string{"$"},
+		ActiveLocations:   []string{model.LocationQuery, model.LocationJSON},
+		QueryKeys:         []string{"existing"},
+		JSONParents:       []string{"$"},
+		LocalCoveredNames: []string{"limit"},
 	}
 	_, audit := evaluateSuggestions(input, []Suggestion{
 		{Name: "existing", Location: "query", Priority: 100},
 		{Name: "wrong_parent", Location: "json", JSONParent: "$.missing", Priority: 90},
 		{Name: "header_candidate", Location: "header", Priority: 80},
+		{Name: "limit", Location: "query", Priority: 75},
 		{Name: "good", Location: "query", Priority: 70},
 		{Name: "good", Location: "query", Priority: 60},
 	}, 5)
@@ -99,10 +103,29 @@ func TestAdmissionAuditExplainsLocalRejections(t *testing.T) {
 			reasons[item.RejectionReason] = true
 		}
 	}
-	for _, want := range []string{"already_present", "invalid_json_parent", "inactive_location", "duplicate"} {
+	for _, want := range []string{"already_present", "invalid_json_parent", "inactive_location", "deterministic_coverage", "duplicate"} {
 		if !reasons[want] {
 			t.Fatalf("missing rejection reason %q in %+v", want, audit)
 		}
+	}
+}
+
+func TestLocalCoveredNamesNeverLeaveProviderBoundary(t *testing.T) {
+	input := Input{
+		ActiveLocations:        []string{"query"},
+		ExcludedCandidateNames: []string{"limit"},
+		LocalCoveredNames:      []string{"private_custom_word"},
+	}
+	b, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(b)
+	if strings.Contains(text, "private_custom_word") {
+		t.Fatalf("local covered name leaked into provider JSON: %s", text)
+	}
+	if !strings.Contains(text, "excluded_candidate_names") || !strings.Contains(text, "limit") {
+		t.Fatalf("provider-safe exclusions missing: %s", text)
 	}
 }
 
