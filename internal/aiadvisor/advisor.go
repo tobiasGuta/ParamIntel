@@ -10,7 +10,11 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
 
-const SourceAISemanticHypothesis = "ai_semantic_hypothesis"
+const (
+	SourceAISemanticHypothesis = "ai_semantic_hypothesis"
+	AdmissionAdmitted          = "admitted"
+	AdmissionRejected          = "rejected"
+)
 
 var candidateNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.:-]{0,63}$`)
 
@@ -33,12 +37,23 @@ type Suggestion struct {
 	Priority   int    `json:"priority"`
 }
 
+type SuggestionAudit struct {
+	Name            string
+	Location        string
+	JSONParent      string
+	Reason          string
+	Priority        int
+	Admission       string
+	RejectionReason string
+}
+
 type Result struct {
 	Provider       string
 	Model          string
 	SuggestedCount int
 	AcceptedCount  int
 	Candidates     []model.Candidate
+	Audit          []SuggestionAudit
 }
 
 func Generate(ctx context.Context, provider Provider, input Input, limit int) (Result, error) {
@@ -52,21 +67,31 @@ func Generate(ctx context.Context, provider Provider, input Input, limit int) (R
 	if err != nil {
 		return Result{}, err
 	}
-	candidates := AcceptSuggestions(input, suggestions, limit)
+	candidates, audit := evaluateSuggestions(input, suggestions, limit)
 	return Result{
 		Provider:       provider.Name(),
 		Model:          provider.Model(),
 		SuggestedCount: len(suggestions),
 		AcceptedCount:  len(candidates),
 		Candidates:     candidates,
+		Audit:          audit,
 	}, nil
 }
 
-// AcceptSuggestions validates all model output against deterministic local
-// constraints before it is allowed to enter the discovery candidate queue.
+// AcceptSuggestions preserves the original candidate-only helper for callers
+// that do not need admission audit details.
 func AcceptSuggestions(input Input, suggestions []Suggestion, limit int) []model.Candidate {
+	candidates, _ := evaluateSuggestions(input, suggestions, limit)
+	return candidates
+}
+
+// evaluateSuggestions validates all model output against deterministic local
+// constraints before it is allowed to enter the discovery candidate queue. It
+// retains one bounded audit record per provider suggestion so rejected model
+// output remains observable without becoming discovery evidence.
+func evaluateSuggestions(input Input, suggestions []Suggestion, limit int) ([]model.Candidate, []SuggestionAudit) {
 	if limit <= 0 {
-		return nil
+		return nil, nil
 	}
 	items := append([]Suggestion(nil), suggestions...)
 	sort.SliceStable(items, func(i, j int) bool {
@@ -81,36 +106,18 @@ func AcceptSuggestions(input Input, suggestions []Suggestion, limit int) []model
 	existing := existingCandidateKeys(input)
 	seen := map[string]struct{}{}
 	out := make([]model.Candidate, 0, min(limit, len(items)))
+	audit := make([]SuggestionAudit, 0, len(items))
 
 	for _, suggestion := range items {
 		name := strings.TrimSpace(suggestion.Name)
 		location := strings.ToLower(strings.TrimSpace(suggestion.Location))
-		if !candidateNamePattern.MatchString(name) {
-			continue
-		}
-		if _, ok := active[location]; !ok {
-			continue
-		}
-
 		parent := ""
 		if location == model.LocationJSON {
 			parent = strings.TrimSpace(suggestion.JSONParent)
 			if parent == "" {
 				parent = "$"
 			}
-			if _, ok := parents[parent]; !ok {
-				continue
-			}
 		}
-		key := candidateKey(location, parent, name)
-		if _, ok := existing[key]; ok {
-			continue
-		}
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-
 		priority := suggestion.Priority
 		if priority < 1 {
 			priority = 1
@@ -118,7 +125,50 @@ func AcceptSuggestions(input Input, suggestions []Suggestion, limit int) []model
 		if priority > 100 {
 			priority = 100
 		}
-		reason := boundedReason(suggestion.Reason)
+		record := SuggestionAudit{
+			Name:       name,
+			Location:   location,
+			JSONParent: parent,
+			Reason:     boundedReason(suggestion.Reason),
+			Priority:   priority,
+			Admission:  AdmissionRejected,
+		}
+
+		switch {
+		case !candidateNamePattern.MatchString(name):
+			record.RejectionReason = "invalid_name"
+			audit = append(audit, record)
+			continue
+		case !contains(active, location):
+			record.RejectionReason = "inactive_location"
+			audit = append(audit, record)
+			continue
+		case location == model.LocationJSON && !contains(parents, parent):
+			record.RejectionReason = "invalid_json_parent"
+			audit = append(audit, record)
+			continue
+		}
+
+		key := candidateKey(location, parent, name)
+		if _, ok := existing[key]; ok {
+			record.RejectionReason = "already_present"
+			audit = append(audit, record)
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			record.RejectionReason = "duplicate"
+			audit = append(audit, record)
+			continue
+		}
+		seen[key] = struct{}{}
+		if len(out) >= limit {
+			record.RejectionReason = "candidate_budget_exhausted"
+			audit = append(audit, record)
+			continue
+		}
+
+		record.Admission = AdmissionAdmitted
+		audit = append(audit, record)
 		out = append(out, model.Candidate{
 			Name:       name,
 			Location:   location,
@@ -126,14 +176,11 @@ func AcceptSuggestions(input Input, suggestions []Suggestion, limit int) []model
 			Sources: []model.CandidateSource{{
 				Source:   SourceAISemanticHypothesis,
 				Priority: priority,
-				Reason:   reason,
+				Reason:   record.Reason,
 			}},
 		})
-		if len(out) >= limit {
-			break
-		}
 	}
-	return out
+	return out, audit
 }
 
 func existingCandidateKeys(input Input) map[string]struct{} {
@@ -163,6 +210,11 @@ func stringSet(values []string) map[string]struct{} {
 		out[value] = struct{}{}
 	}
 	return out
+}
+
+func contains(set map[string]struct{}, value string) bool {
+	_, ok := set[value]
+	return ok
 }
 
 func candidateKey(location, parent, name string) string {
