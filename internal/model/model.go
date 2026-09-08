@@ -63,6 +63,7 @@ type CandidateSource struct {
 	Path         string `json:"path,omitempty"`
 	ObservedType string `json:"observed_type,omitempty"`
 	Priority     int    `json:"priority,omitempty"`
+	Reason       string `json:"reason,omitempty"`
 }
 
 type Candidate struct {
@@ -131,11 +132,20 @@ type ParameterResult struct {
 	ValueProfile         []ValueObservation `json:"value_profile,omitempty"`
 }
 
+type AIAdvisorSummary struct {
+	Provider            string `json:"provider"`
+	Model               string `json:"model"`
+	InputPolicy         string `json:"input_policy"`
+	SuggestedCandidates int    `json:"suggested_candidates"`
+	AcceptedCandidates  int    `json:"accepted_candidates"`
+}
+
 type ScanReport struct {
 	Version    string            `json:"version"`
 	Target     string            `json:"target"`
 	Method     string            `json:"method"`
 	Baseline   BaselineSummary   `json:"baseline"`
+	AIAdvisor  *AIAdvisorSummary `json:"ai_advisor,omitempty"`
 	Parameters []ParameterResult `json:"parameters"`
 }
 
