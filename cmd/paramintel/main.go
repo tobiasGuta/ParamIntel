@@ -130,6 +130,12 @@ func main() {
 		fatal(err)
 		advisorInput, err := aiadvisor.BuildInput(tmpl, aiRaw, locations, jsonDepth)
 		fatal(err)
+		// Only the static built-ins are shared with the provider as exclusions.
+		// A user-supplied wordlist remains local, but all loaded deterministic
+		// names participate in the local admission gate so AI cannot claim
+		// coverage ParamIntel already had.
+		advisorInput.ExcludedCandidateNames = append([]string(nil), candidates.Builtin...)
+		advisorInput.LocalCoveredNames = append([]string(nil), words...)
 		advisorResult, err := aiadvisor.Generate(ctx, provider, advisorInput, aiCandidateBudget)
 		fatal(err)
 		seeded = append(seeded, advisorResult.Candidates...)
