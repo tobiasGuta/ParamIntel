@@ -35,7 +35,13 @@ func TestGeminiProviderRequestAndStructuredResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := p.Suggest(context.Background(), Input{Method: "GET", Path: "/api/projects", ActiveLocations: []string{"query"}}, 5)
+	got, err := p.Suggest(context.Background(), Input{
+		Method:                 "GET",
+		Path:                   "/api/projects",
+		ActiveLocations:        []string{"query"},
+		ExcludedCandidateNames: []string{"limit", "offset"},
+		LocalCoveredNames:      []string{"private_custom_word"},
+	}, 5)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +53,21 @@ func TestGeminiProviderRequestAndStructuredResponse(t *testing.T) {
 	}
 	if seen["store"] != false {
 		t.Fatalf("store=%v", seen["store"])
+	}
+	generation, ok := seen["generation_config"].(map[string]any)
+	if !ok || generation["thinking_level"] != "low" {
+		t.Fatalf("generation_config=%#v", seen["generation_config"])
+	}
+	inputText, _ := seen["input"].(string)
+	if !strings.Contains(inputText, "excluded_candidate_names") || !strings.Contains(inputText, "limit") {
+		t.Fatalf("provider exclusions missing from input: %s", inputText)
+	}
+	if strings.Contains(inputText, "private_custom_word") {
+		t.Fatalf("local-only covered name leaked to provider: %s", inputText)
+	}
+	systemInstruction, _ := seen["system_instruction"].(string)
+	if !strings.Contains(systemInstruction, "100 is the highest priority") || !strings.Contains(systemInstruction, "excluded_candidate_names") {
+		t.Fatalf("priority/exclusion guidance missing: %s", systemInstruction)
 	}
 	rf, ok := seen["response_format"].(map[string]any)
 	if !ok || rf["mime_type"] != "application/json" {
