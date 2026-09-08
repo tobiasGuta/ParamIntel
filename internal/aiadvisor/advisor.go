@@ -19,14 +19,16 @@ const (
 var candidateNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.:-]{0,63}$`)
 
 type Input struct {
-	Method            string         `json:"method"`
-	Path              string         `json:"path"`
-	ActiveLocations   []string       `json:"active_locations"`
-	QueryKeys         []string       `json:"query_keys,omitempty"`
-	FormKeys          []string       `json:"form_keys,omitempty"`
-	JSONParents       []string       `json:"json_parents,omitempty"`
-	RequestJSONShape  map[string]any `json:"request_json_shape,omitempty"`
-	ResponseJSONShape map[string]any `json:"response_json_shape,omitempty"`
+	Method                 string         `json:"method"`
+	Path                   string         `json:"path"`
+	ActiveLocations        []string       `json:"active_locations"`
+	QueryKeys              []string       `json:"query_keys,omitempty"`
+	FormKeys               []string       `json:"form_keys,omitempty"`
+	JSONParents            []string       `json:"json_parents,omitempty"`
+	RequestJSONShape       map[string]any `json:"request_json_shape,omitempty"`
+	ResponseJSONShape      map[string]any `json:"response_json_shape,omitempty"`
+	ExcludedCandidateNames []string       `json:"excluded_candidate_names,omitempty"`
+	LocalCoveredNames      []string       `json:"-"`
 }
 
 type Suggestion struct {
@@ -104,6 +106,7 @@ func evaluateSuggestions(input Input, suggestions []Suggestion, limit int) ([]mo
 	active := stringSet(input.ActiveLocations)
 	parents := stringSet(input.JSONParents)
 	existing := existingCandidateKeys(input)
+	covered := stringSet(input.LocalCoveredNames)
 	seen := map[string]struct{}{}
 	out := make([]model.Candidate, 0, min(limit, len(items)))
 	audit := make([]SuggestionAudit, 0, len(items))
@@ -152,6 +155,11 @@ func evaluateSuggestions(input Input, suggestions []Suggestion, limit int) ([]mo
 		key := candidateKey(location, parent, name)
 		if _, ok := existing[key]; ok {
 			record.RejectionReason = "already_present"
+			audit = append(audit, record)
+			continue
+		}
+		if _, ok := covered[name]; ok {
+			record.RejectionReason = "deterministic_coverage"
 			audit = append(audit, record)
 			continue
 		}
