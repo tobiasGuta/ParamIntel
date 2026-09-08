@@ -154,6 +154,7 @@ type AIAdvisorSummary struct {
 	Provider            string                    `json:"provider"`
 	Model               string                    `json:"model"`
 	InputPolicy         string                    `json:"input_policy"`
+	ContextSource       string                    `json:"context_source"`
 	SuggestedCandidates int                       `json:"suggested_candidates"`
 	AcceptedCandidates  int                       `json:"accepted_candidates"`
 	RejectedCandidates  int                       `json:"rejected_candidates"`
