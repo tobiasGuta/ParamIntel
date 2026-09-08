@@ -6,6 +6,8 @@ The endpoint exposes a response-side field named `include_archived`, but ParamIn
 
 > Can Gemini propose a useful candidate name that normal ParamIntel candidate acquisition misses, while ParamIntel's existing verifier remains responsible for the evidence?
 
+The lab also verifies the normal v0.6 context flow: ParamIntel reuses one response already collected during baseline, sanitizes its structure locally, and sends only that sanitized structure to the advisor. No separate AI response fixture is required for the default path.
+
 The lab does **not** test AI-generated semantic values yet.
 
 ## 1. Start the lab
@@ -72,7 +74,7 @@ $env:GEMINI_API_KEY = Read-Host "Gemini API key" -MaskInput
 
 Do not commit the key or put it in a request/response fixture.
 
-## 5. AI-enabled run
+## 5. AI-enabled run using automatic baseline context
 
 ```powershell
 .\paramintel.exe `
@@ -80,7 +82,6 @@ Do not commit the key or put it in a request/response fixture.
   -scheme http `
   -ai-advisor `
   -ai-provider gemini `
-  -ai-context-response .\labs\v0.6-ai-advisor\response.json `
   -ai-candidate-budget 8 `
   -baseline 3 `
   -trials 3 `
@@ -89,6 +90,18 @@ Do not commit the key or put it in a request/response fixture.
   -value-aware=false `
   -verbose `
   -output .\labs\v0.6-ai-advisor\ai-findings.json
+```
+
+The verbose output should include:
+
+```text
+context source: baseline_response
+```
+
+The JSON report should likewise contain:
+
+```json
+"context_source": "baseline_response"
 ```
 
 A successful acceptance should show the advisor executing and ParamIntel independently confirming `include_archived`.
@@ -116,6 +129,10 @@ The finding should retain provenance similar to:
 The exact AI priority/reason wording is not the acceptance criterion. The important evidence is:
 
 ```text
+baseline response already collected
+        ↓
+local sanitizer keeps structure only
+        ↓
 AI proposes candidate
         ↓
 local output gate accepts candidate
@@ -124,6 +141,16 @@ ParamIntel candidate trials change
         ↓
 paired random-name controls do not change
 ```
+
+### Optional explicit AI context override
+
+When you intentionally want Gemini to reason from a different related response, use:
+
+```text
+-ai-context-response response.txt
+```
+
+That file replaces the automatic baseline response only for AI structural context. It still passes through the same local sanitizer. The report records `context_source: ai_context_response`.
 
 ## 6. Clear the key when finished
 
@@ -136,6 +163,7 @@ Remove-Item Env:GEMINI_API_KEY
 Record **PASS** only if all of these are true:
 
 - control run reports zero parameters;
+- AI advisor reports `context source: baseline_response` without requiring `-ai-context-response`;
 - AI advisor reports that it accepted at least one candidate hypothesis;
 - `include_archived` is independently confirmed by ParamIntel;
 - candidate trials are reproducibly changed;
