@@ -49,6 +49,15 @@ func (e *BackoffError) Error() string {
 }
 
 func Build(ctx context.Context, client *http.Client, tmpl model.RequestTemplate, samples int) (model.BaselineProfile, error) {
+	profile, _, err := BuildWithSnapshot(ctx, client, tmpl, samples)
+	return profile, err
+}
+
+// BuildWithSnapshot performs the same baseline sampling as Build and also
+// returns one already-collected baseline snapshot. The snapshot is intended for
+// callers that need response context without issuing another target request.
+// It does not alter baseline evidence or sampling behavior.
+func BuildWithSnapshot(ctx context.Context, client *http.Client, tmpl model.RequestTemplate, samples int) (model.BaselineProfile, model.Snapshot, error) {
 	if samples < 2 {
 		samples = 3
 	}
@@ -56,11 +65,11 @@ func Build(ctx context.Context, client *http.Client, tmpl model.RequestTemplate,
 	for i := 0; i < samples; i++ {
 		s, err := SendMutations(ctx, client, tmpl, nil)
 		if err != nil {
-			return model.BaselineProfile{}, fmt.Errorf("baseline request %d: %w", i+1, err)
+			return model.BaselineProfile{}, model.Snapshot{}, fmt.Errorf("baseline request %d: %w", i+1, err)
 		}
 		shots = append(shots, s)
 	}
-	return cmp.BuildBaseline(shots), nil
+	return cmp.BuildBaseline(shots), shots[0], nil
 }
 
 // Send preserves the v0.1 query-only helper for callers and tests.
