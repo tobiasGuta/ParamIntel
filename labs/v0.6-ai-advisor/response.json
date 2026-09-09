@@ -1,0 +1,13 @@
+{
+  "projects": [
+    {
+      "id": "p_active",
+      "name": "Current project",
+      "archived": false
+    }
+  ],
+  "filters": {
+    "include_archived": false
+  },
+  "archived_count": 1
+}

@@ -63,6 +63,7 @@ type CandidateSource struct {
 	Path         string `json:"path,omitempty"`
 	ObservedType string `json:"observed_type,omitempty"`
 	Priority     int    `json:"priority,omitempty"`
+	Reason       string `json:"reason,omitempty"`
 }
 
 type Candidate struct {
@@ -131,11 +132,43 @@ type ParameterResult struct {
 	ValueProfile         []ValueObservation `json:"value_profile,omitempty"`
 }
 
+type AIAdvisorCandidateAudit struct {
+	Name                 string           `json:"name"`
+	Location             string           `json:"location"`
+	JSONParent           string           `json:"json_parent,omitempty"`
+	Priority             int              `json:"priority"`
+	Reason               string           `json:"reason,omitempty"`
+	Admission            string           `json:"admission"`
+	RejectionReason      string           `json:"rejection_reason,omitempty"`
+	Tested               bool             `json:"tested"`
+	Verified             bool             `json:"verified"`
+	DiscoveryOutcome     string           `json:"discovery_outcome"`
+	Confidence           *ConfidenceScore `json:"confidence,omitempty"`
+	CandidateChanged     *int             `json:"candidate_changed,omitempty"`
+	CandidateTrials      *int             `json:"candidate_trials,omitempty"`
+	RandomControlChanged *int             `json:"random_control_changed,omitempty"`
+	RandomControlTrials  *int             `json:"random_control_trials,omitempty"`
+}
+
+type AIAdvisorSummary struct {
+	Provider            string                    `json:"provider"`
+	Model               string                    `json:"model"`
+	InputPolicy         string                    `json:"input_policy"`
+	ContextSource       string                    `json:"context_source"`
+	SuggestedCandidates int                       `json:"suggested_candidates"`
+	AcceptedCandidates  int                       `json:"accepted_candidates"`
+	RejectedCandidates  int                       `json:"rejected_candidates"`
+	TestedCandidates    int                       `json:"tested_candidates"`
+	VerifiedCandidates  int                       `json:"verified_candidates"`
+	CandidateAudit      []AIAdvisorCandidateAudit `json:"candidate_audit,omitempty"`
+}
+
 type ScanReport struct {
 	Version    string            `json:"version"`
 	Target     string            `json:"target"`
 	Method     string            `json:"method"`
 	Baseline   BaselineSummary   `json:"baseline"`
+	AIAdvisor  *AIAdvisorSummary `json:"ai_advisor,omitempty"`
 	Parameters []ParameterResult `json:"parameters"`
 }
 

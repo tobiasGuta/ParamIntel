@@ -14,8 +14,14 @@ import (
 )
 
 func TestVersion(t *testing.T) {
-	if version != "0.5.0" {
-		t.Fatalf("version=%q want=0.5.0", version)
+	if version != "0.6.0-dev" {
+		t.Fatalf("version=%q want=0.6.0-dev", version)
+	}
+}
+
+func TestDefaultAIProviderTimeout(t *testing.T) {
+	if defaultAIProviderTimeout != 2*time.Minute {
+		t.Fatalf("defaultAIProviderTimeout=%v want=2m", defaultAIProviderTimeout)
 	}
 }
 
@@ -54,6 +60,23 @@ func TestValidateDelay(t *testing.T) {
 	}
 	if err := validateDelay(-time.Millisecond); err == nil {
 		t.Fatal("expected negative delay validation error")
+	}
+}
+
+func TestValidateAIOptions(t *testing.T) {
+	if err := validateAIOptions(false, 0, 0); err != nil {
+		t.Fatalf("disabled advisor should ignore AI-only values: %v", err)
+	}
+	if err := validateAIOptions(true, 12, 20*time.Second); err != nil {
+		t.Fatalf("valid AI options rejected: %v", err)
+	}
+	for _, budget := range []int{0, -1, 51} {
+		if err := validateAIOptions(true, budget, time.Second); err == nil {
+			t.Fatalf("budget=%d should be rejected", budget)
+		}
+	}
+	if err := validateAIOptions(true, 1, 0); err == nil {
+		t.Fatal("zero AI timeout should be rejected")
 	}
 }
 

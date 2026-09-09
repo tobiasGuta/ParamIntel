@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tobiasGuta/ParamIntel/internal/aiadvisor"
 	"github.com/tobiasGuta/ParamIntel/internal/baseline"
 	"github.com/tobiasGuta/ParamIntel/internal/candidates"
 	"github.com/tobiasGuta/ParamIntel/internal/contextintel"
@@ -19,14 +20,19 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
 
-const version = "0.5.0"
+const (
+	version                  = "0.6.0-dev"
+	defaultAIProviderTimeout = 2 * time.Minute
+)
 
 func main() {
 	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath string
-	var baselineN, chunk, trials, jsonDepth, valueAwareBudget int
-	var timeout, delay time.Duration
+	var aiProviderName, aiModel, aiAPIKeyEnv, aiContextResponsePath string
+	var baselineN, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget int
+	var timeout, delay, aiTimeout time.Duration
 	var minConf float64
-	var verbose, characterize, valueAware, allowStateChanging, showVersion bool
+	var verbose, characterize, valueAware, allowStateChanging, showVersion, aiAdvisorEnabled bool
+
 	flag.StringVar(&reqPath, "request", "", "raw HTTP request file (required)")
 	flag.StringVar(&wordPath, "wordlist", "", "optional parameter wordlist")
 	flag.StringVar(&contextResponsePath, "context-response", "", "optional related raw HTTP response or JSON body used to derive high-signal JSON candidates")
@@ -45,6 +51,15 @@ func main() {
 	flag.BoolVar(&characterize, "characterize", true, "profile likely values and infer parameter types after discovery")
 	flag.BoolVar(&valueAware, "value-aware", true, "rescue value-sensitive parameters with bounded semantic probes")
 	flag.BoolVar(&allowStateChanging, "allow-state-changing", false, "allow repeated probing of POST/PUT/PATCH/DELETE requests after confirming authorization and side-effect risk")
+
+	flag.BoolVar(&aiAdvisorEnabled, "ai-advisor", false, "enable optional AI candidate hypothesis generation before discovery")
+	flag.StringVar(&aiProviderName, "ai-provider", aiadvisor.ProviderGemini, "AI provider adapter (currently: gemini)")
+	flag.StringVar(&aiModel, "ai-model", "", "AI model override; provider default if empty")
+	flag.StringVar(&aiAPIKeyEnv, "ai-api-key-env", "", "environment variable containing the AI provider API key; provider default if empty")
+	flag.StringVar(&aiContextResponsePath, "ai-context-response", "", "optional raw HTTP response or JSON body override for sanitized AI context; a collected baseline response is used by default")
+	flag.IntVar(&aiCandidateBudget, "ai-candidate-budget", 12, "maximum AI-suggested candidates admitted to discovery")
+	flag.DurationVar(&aiTimeout, "ai-timeout", defaultAIProviderTimeout, "AI provider request timeout")
+
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.Parse()
 	if showVersion {
@@ -59,6 +74,8 @@ func main() {
 		fatal(fmt.Errorf("-value-aware-budget must be 0 or greater"))
 	}
 	fatal(validateDelay(delay))
+	fatal(validateAIOptions(aiAdvisorEnabled, aiCandidateBudget, aiTimeout))
+
 	locations, err := parseLocations(locationSpec)
 	fatal(err)
 	raw, err := os.ReadFile(reqPath)
@@ -72,8 +89,9 @@ func main() {
 	fatal(err)
 
 	var seeded []model.Candidate
+	var contextRaw []byte
 	if contextResponsePath != "" {
-		contextRaw, err := os.ReadFile(contextResponsePath)
+		contextRaw, err = os.ReadFile(contextResponsePath)
 		fatal(err)
 		contextReport, err := contextintel.HarvestJSONResponse(tmpl.Body, contextRaw, jsonDepth)
 		fatal(err)
@@ -87,13 +105,39 @@ func main() {
 		}
 	}
 
+	ctx := context.Background()
+	var aiProvider aiadvisor.Provider
+	var aiOverrideRaw []byte
+	if aiAdvisorEnabled {
+		providerEnv := strings.TrimSpace(aiAPIKeyEnv)
+		if providerEnv == "" {
+			providerEnv, err = aiadvisor.DefaultAPIKeyEnv(aiProviderName)
+			fatal(err)
+		}
+		apiKey := strings.TrimSpace(os.Getenv(providerEnv))
+		if apiKey == "" {
+			fatal(fmt.Errorf("AI provider %q requires an API key in environment variable %s", aiProviderName, providerEnv))
+		}
+		if aiContextResponsePath != "" {
+			aiOverrideRaw, err = os.ReadFile(aiContextResponsePath)
+			fatal(err)
+		}
+		aiClient := &http.Client{Timeout: aiTimeout}
+		aiProvider, err = aiadvisor.NewProvider(aiadvisor.ProviderConfig{
+			Provider: aiProviderName,
+			APIKey:   apiKey,
+			Model:    aiModel,
+			Client:   aiClient,
+		})
+		fatal(err)
+	}
+
 	client := &http.Client{
 		Timeout:       timeout,
 		Transport:     httppolicy.NewPacedTransport(http.DefaultTransport, delay),
 		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
 	}
-	ctx := context.Background()
-	profile, err := baseline.Build(ctx, client, tmpl, baselineN)
+	profile, baselineSnapshot, err := baseline.BuildWithSnapshot(ctx, client, tmpl, baselineN)
 	fatal(err)
 	if verbose {
 		fmt.Printf("[+] Baseline ready\n")
@@ -105,6 +149,34 @@ func main() {
 			fmt.Printf("[*] Request pacing: minimum %s between request starts\n", delay)
 		}
 	}
+
+	var aiSummary *model.AIAdvisorSummary
+	if aiAdvisorEnabled {
+		aiRaw, aiContextSource := selectAIContext(baselineSnapshot, aiOverrideRaw, aiContextResponsePath != "")
+		advisorInput, err := aiadvisor.BuildInput(tmpl, aiRaw, locations, jsonDepth)
+		fatal(err)
+		// Only the static built-ins are shared with the provider as exclusions.
+		// A user-supplied wordlist remains local, but all loaded deterministic
+		// names participate in the local admission gate so AI cannot claim
+		// coverage ParamIntel already had.
+		advisorInput.ExcludedCandidateNames = append([]string(nil), candidates.Builtin...)
+		advisorInput.LocalCoveredNames = append([]string(nil), words...)
+		advisorResult, err := aiadvisor.Generate(ctx, aiProvider, advisorInput, aiCandidateBudget)
+		fatal(err)
+		seeded = append(seeded, advisorResult.Candidates...)
+		aiSummary = buildAIAdvisorSummary(advisorResult)
+		aiSummary.ContextSource = aiContextSource
+		if verbose {
+			fmt.Printf("[*] AI Candidate Advisor\n")
+			fmt.Printf("    provider: %s\n", advisorResult.Provider)
+			fmt.Printf("    model: %s\n", advisorResult.Model)
+			fmt.Printf("    input policy: sanitized structure only\n")
+			fmt.Printf("    context source: %s\n", aiContextSource)
+			fmt.Printf("    suggested candidates: %d\n", advisorResult.SuggestedCount)
+			fmt.Printf("    accepted candidate hypotheses: %d\n", advisorResult.AcceptedCount)
+		}
+	}
+
 	engine := discovery.Engine{Client: client, Config: discovery.Config{
 		ChunkSize:        chunk,
 		Trials:           trials,
@@ -119,7 +191,18 @@ func main() {
 	}}
 	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
 	fatal(err)
-	report := model.ScanReport{Version: version, Target: tmpl.URL, Method: tmpl.Method, Baseline: model.BaselineSummary{Samples: profile.Samples, StableJSONPaths: len(profile.StableJSONPaths), BodyLenMin: profile.BodyLenMin, BodyLenMax: profile.BodyLenMax}, Parameters: params}
+	finalizeAIAdvisorSummary(aiSummary, params)
+	if verbose && aiSummary != nil {
+		printAIAdvisorAudit(aiSummary)
+	}
+	report := model.ScanReport{
+		Version:    version,
+		Target:     tmpl.URL,
+		Method:     tmpl.Method,
+		Baseline:   model.BaselineSummary{Samples: profile.Samples, StableJSONPaths: len(profile.StableJSONPaths), BodyLenMin: profile.BodyLenMin, BodyLenMax: profile.BodyLenMax},
+		AIAdvisor:  aiSummary,
+		Parameters: params,
+	}
 	b, err := json.MarshalIndent(report, "", "  ")
 	fatal(err)
 	b = append(b, '\n')
@@ -134,6 +217,19 @@ func main() {
 func validateDelay(delay time.Duration) error {
 	if delay < 0 {
 		return fmt.Errorf("-delay must be 0 or greater")
+	}
+	return nil
+}
+
+func validateAIOptions(enabled bool, candidateBudget int, timeout time.Duration) error {
+	if !enabled {
+		return nil
+	}
+	if candidateBudget <= 0 || candidateBudget > 50 {
+		return fmt.Errorf("-ai-candidate-budget must be between 1 and 50 when -ai-advisor is enabled")
+	}
+	if timeout <= 0 {
+		return fmt.Errorf("-ai-timeout must be greater than zero when -ai-advisor is enabled")
 	}
 	return nil
 }
