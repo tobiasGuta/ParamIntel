@@ -41,7 +41,7 @@ func NewGeminiProvider(cfg GeminiConfig) (*GeminiProvider, error) {
 	}
 	client := cfg.Client
 	if client == nil {
-		client = &http.Client{Timeout: 60 * time.Second}
+		client = &http.Client{Timeout: 2 * time.Minute}
 	}
 	return &GeminiProvider{
 		apiKey:   cfg.APIKey,
