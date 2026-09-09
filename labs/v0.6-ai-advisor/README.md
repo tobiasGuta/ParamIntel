@@ -92,6 +92,8 @@ Do not commit the key or put it in a request/response fixture.
   -output .\labs\v0.6-ai-advisor\ai-findings.json
 ```
 
+The default Gemini request timeout is two minutes. A real minimal Gemini 3.8 Flash request was observed completing successfully after 64.3 seconds, so the v0.6 default deliberately leaves more headroom than the earlier 60-second deadline while preserving stateless `store:false` execution. Use `-ai-timeout` only when you intentionally need a different deadline.
+
 The verbose output should include:
 
 ```text
