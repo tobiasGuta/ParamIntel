@@ -92,7 +92,9 @@ Do not commit the key or put it in a request/response fixture.
   -output .\labs\v0.6-ai-advisor\ai-findings.json
 ```
 
-The default Gemini request timeout is two minutes. A real minimal Gemini 3.8 Flash request was observed completing successfully after 64.3 seconds, so the v0.6 default deliberately leaves more headroom than the earlier 60-second deadline while preserving stateless `store:false` execution. Use `-ai-timeout` only when you intentionally need a different deadline.
+Gemini defaults to `gemini-3.5-flash-lite`. In the final real acceptance run, the full command completed in 2.50 seconds, Gemini proposed exactly one candidate (`include_archived`) at priority 95, and ParamIntel verified it at 3/3 candidate changes versus 0/3 random-name controls. `gemini-3.8-flash` remains available through `-ai-model` for explicit experiments, but is not the default because it exceeded the two-minute full-pipeline deadline in the same environment.
+
+The default Gemini request timeout is two minutes. ParamIntel preserves stateless `store:false` execution and does not automatically retry timed-out provider requests. Use `-ai-timeout` only when you intentionally need a different deadline.
 
 The verbose output should include:
 
@@ -172,5 +174,7 @@ Record **PASS** only if all of these are true:
 - paired random-name controls remain unchanged;
 - the finding provenance says `ai_semantic_hypothesis`;
 - no API key or raw sensitive value appears in the findings file.
+
+The final v0.6 acceptance passed these criteria with the default model candidate `gemini-3.5-flash-lite`.
 
 If Gemini suggests plausible candidates but `include_archived` is not confirmed, record the run as **inconclusive**, not as an AI success. The model's suggestion by itself is never evidence.
