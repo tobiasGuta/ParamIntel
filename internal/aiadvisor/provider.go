@@ -9,7 +9,7 @@ import (
 
 const (
 	ProviderGemini     = "gemini"
-	defaultGeminiModel = "gemini-3.8-flash"
+	defaultGeminiModel = "gemini-3.5-flash-lite"
 )
 
 // Provider turns sanitized application structure into candidate hypotheses.
