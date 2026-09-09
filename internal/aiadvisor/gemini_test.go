@@ -79,6 +79,16 @@ func TestGeminiProviderRequestAndStructuredResponse(t *testing.T) {
 	}
 }
 
+func TestGeminiProviderDefaultModel(t *testing.T) {
+	p, err := NewProvider(ProviderConfig{Provider: ProviderGemini, APIKey: "KEY"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Model() != "gemini-3.5-flash-lite" {
+		t.Fatalf("model=%q want=gemini-3.5-flash-lite", p.Model())
+	}
+}
+
 func TestGeminiProviderDefaultTimeout(t *testing.T) {
 	p, err := NewGeminiProvider(GeminiConfig{APIKey: "KEY"})
 	if err != nil {
