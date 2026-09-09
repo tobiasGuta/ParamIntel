@@ -19,6 +19,12 @@ func TestVersion(t *testing.T) {
 	}
 }
 
+func TestDefaultAIProviderTimeout(t *testing.T) {
+	if defaultAIProviderTimeout != 2*time.Minute {
+		t.Fatalf("defaultAIProviderTimeout=%v want=2m", defaultAIProviderTimeout)
+	}
+}
+
 func TestParseLocations(t *testing.T) {
 	got, err := parseLocations("json, query,json")
 	if err != nil {
