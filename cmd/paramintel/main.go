@@ -20,7 +20,10 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
 
-const version = "0.6.0-dev"
+const (
+	version                  = "0.6.0-dev"
+	defaultAIProviderTimeout = 2 * time.Minute
+)
 
 func main() {
 	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath string
@@ -55,7 +58,7 @@ func main() {
 	flag.StringVar(&aiAPIKeyEnv, "ai-api-key-env", "", "environment variable containing the AI provider API key; provider default if empty")
 	flag.StringVar(&aiContextResponsePath, "ai-context-response", "", "optional raw HTTP response or JSON body override for sanitized AI context; a collected baseline response is used by default")
 	flag.IntVar(&aiCandidateBudget, "ai-candidate-budget", 12, "maximum AI-suggested candidates admitted to discovery")
-	flag.DurationVar(&aiTimeout, "ai-timeout", 60*time.Second, "AI provider request timeout")
+	flag.DurationVar(&aiTimeout, "ai-timeout", defaultAIProviderTimeout, "AI provider request timeout")
 
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.Parse()
