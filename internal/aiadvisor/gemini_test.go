@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGeminiProviderRequestAndStructuredResponse(t *testing.T) {
@@ -75,6 +76,16 @@ func TestGeminiProviderRequestAndStructuredResponse(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Name != "include_archived" || got[0].Priority != 90 {
 		t.Fatalf("got=%+v", got)
+	}
+}
+
+func TestGeminiProviderDefaultTimeout(t *testing.T) {
+	p, err := NewGeminiProvider(GeminiConfig{APIKey: "KEY"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.client.Timeout != 2*time.Minute {
+		t.Fatalf("timeout=%v want=2m", p.client.Timeout)
 	}
 }
 
