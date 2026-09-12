@@ -26,7 +26,7 @@ ParamIntel v0.6 AI advisor lab listening on http://127.0.0.1:41780/projects
 
 Leave that terminal open.
 
-## 2. Build ParamIntel from the v0.6 branch
+## 2. Build ParamIntel v0.6.0
 
 In another PowerShell terminal:
 
@@ -38,7 +38,7 @@ go build -trimpath -o paramintel.exe .\cmd\paramintel
 Expected version:
 
 ```text
-ParamIntel v0.6.0-dev
+ParamIntel v0.6.0
 ```
 
 ## 3. Control run without AI
