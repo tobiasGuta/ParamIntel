@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.6.0
+
+- Added the optional AI Candidate Advisor as a candidate-acquisition layer while preserving deterministic verification as the only authority for findings and confidence.
+- Added a provider-neutral internal `Provider` interface with Gemini as the first adapter.
+- Added `-ai-advisor`, `-ai-provider`, `-ai-model`, `-ai-api-key-env`, `-ai-context-response`, `-ai-candidate-budget`, and `-ai-timeout` CLI controls.
+- Gemini now defaults to `gemini-3.5-flash-lite`, with provider-supported model overrides available through `-ai-model`.
+- AI configuration and API-key validation occur locally; Gemini reads `GEMINI_API_KEY` by default and no literal API-key CLI flag is accepted.
+- The normal AI path reuses one response already collected during baseline as structural context, avoiding an extra target request. `-ai-context-response` remains available as an explicit override.
+- Added a local sanitizer that sends bounded application structure rather than raw captured HTTP traffic. Hostnames, Authorization/Cookie data, query/form values, JSON primitive values, raw response text, arbitrary headers, and user wordlist names are omitted from provider input.
+- Added a deterministic local admission gate that rejects malformed names, inactive locations, impossible JSON parents, already-present parameters, deterministically covered names, duplicates, and suggestions beyond the configured budget.
+- Added AI advisor audit/provenance data including provider/model, context source, suggestion/admission state, rejection reason, tested/verified state, and deterministic trial/confidence data.
+- AI priority and reason never affect ParamIntel confidence. A finding is attributed to AI only when the exact placement retains `ai_semantic_hypothesis` provenance and independently passes ParamIntel verification.
+- Added a two-minute default AI provider timeout while preserving stateless `store:false` behavior and no automatic retry for timed-out generations.
+- Added a reproducible localhost v0.6 acceptance lab. The final default-model run proposed `include_archived`, which ParamIntel independently verified at 3/3 candidate changes versus 0/3 paired random-name control changes with 1.00 HIGH confidence and zero false findings in the acceptance run.
+- Updated the release version to `ParamIntel v0.6.0` and refreshed release-facing README and v0.6 lab documentation.
+
 ## v0.5.0
 
 - Added evidence-integrity protection for definite rate-limit/backoff responses before they can become behavioral snapshots.
