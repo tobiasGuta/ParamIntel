@@ -26,11 +26,11 @@ func Snapshot(status int, headers map[string][]string, body []byte) model.Snapsh
 
 func BuildBaseline(samples []model.Snapshot) model.BaselineProfile {
 	p := model.BaselineProfile{
-		Samples:             len(samples),
-		StableJSONPaths:     map[string]string{},
-		SeenJSONPaths:       map[string]struct{}{},
-		StableHeaderHashes:  map[string]string{},
-		SeenHeaderNames:     map[string]struct{}{},
+		Samples:            len(samples),
+		StableJSONPaths:    map[string]string{},
+		SeenJSONPaths:      map[string]struct{}{},
+		StableHeaderHashes: map[string]string{},
+		SeenHeaderNames:    map[string]struct{}{},
 	}
 	if len(samples) == 0 {
 		return p
@@ -143,6 +143,7 @@ func BuildBaseline(samples []model.Snapshot) model.BaselineProfile {
 					stable = false
 					break
 				}
+			}
 			if stable {
 				p.StableJSONPaths[k] = v
 			}
