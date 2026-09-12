@@ -157,6 +157,11 @@ func AgainstBaseline(p model.BaselineProfile, s model.Snapshot) model.Comparison
 	if p.StatusStable && s.StatusCode != p.StatusCode {
 		diffs = append(diffs, model.Difference{Kind: "status", Before: strconv.Itoa(p.StatusCode), After: strconv.Itoa(s.StatusCode)})
 	}
+
+	// Evidence-fidelity features are additive to the existing body/JSON model.
+	// Only observations that were stable across baseline samples are eligible.
+	diffs = append(diffs, compareStableResponseFeatures(p, s)...)
+
 	if p.IsJSON && s.IsJSON {
 		for path, before := range p.StableJSONPaths {
 			after, ok := s.JSONPaths[path]
@@ -192,6 +197,73 @@ func AgainstBaseline(p model.BaselineProfile, s model.Snapshot) model.Comparison
 		return diffs[i].Kind < diffs[j].Kind
 	})
 	return model.Comparison{Meaningful: len(diffs) > 0, Differences: diffs}
+}
+
+func compareStableResponseFeatures(p model.BaselineProfile, s model.Snapshot) []model.Difference {
+	var diffs []model.Difference
+
+	if p.ContentTypeStable && s.Features.ContentType != p.ContentType {
+		diffs = append(diffs, model.Difference{
+			Kind:   "content_type",
+			Before: p.ContentType,
+			After:  s.Features.ContentType,
+		})
+	}
+
+	probeHeaders := responsefeatures.HeaderFingerprints(s.Headers)
+	for name, expected := range p.StableHeaderHashes {
+		got, ok := probeHeaders[name]
+		if !ok {
+			diffs = append(diffs, model.Difference{Kind: "header_removed", Path: name})
+			continue
+		}
+		if got != expected {
+			diffs = append(diffs, model.Difference{Kind: "header_value_changed", Path: name})
+		}
+	}
+	for name := range probeHeaders {
+		if _, seen := p.SeenHeaderNames[name]; !seen {
+			diffs = append(diffs, model.Difference{Kind: "header_added", Path: name})
+		}
+	}
+
+	// JSON already has path-level semantic comparison. The new body metrics are
+	// intentionally focused on non-JSON responses where v0.6 had less fidelity.
+	if p.IsJSON {
+		return diffs
+	}
+
+	if p.HTMLAvailable && p.HTMLStructureStable && s.Features.IsHTML && s.Features.HTMLStructureHash != "" && s.Features.HTMLStructureHash != p.HTMLStructureHash {
+		diffs = append(diffs, model.Difference{Kind: "html_structure_changed"})
+	}
+
+	if p.TextMetricsAvailable && s.Features.IsText {
+		if outsideMetricRange(s.Features.LineCount, p.LineCountMin, p.LineCountMax, 2) {
+			diffs = append(diffs, model.Difference{
+				Kind:   "line_count",
+				Before: fmt.Sprintf("%d..%d", p.LineCountMin, p.LineCountMax),
+				After:  strconv.Itoa(s.Features.LineCount),
+			})
+		}
+		if outsideMetricRange(s.Features.WordCount, p.WordCountMin, p.WordCountMax, 8) {
+			diffs = append(diffs, model.Difference{
+				Kind:   "word_count",
+				Before: fmt.Sprintf("%d..%d", p.WordCountMin, p.WordCountMax),
+				After:  strconv.Itoa(s.Features.WordCount),
+			})
+		}
+	}
+
+	return diffs
+}
+
+func outsideMetricRange(value, minValue, maxValue, minimumTolerance int) bool {
+	span := maxValue - minValue
+	tolerance := minimumTolerance
+	if span*2 > tolerance {
+		tolerance = span * 2
+	}
+	return value < minValue-tolerance || value > maxValue+tolerance
 }
 
 func flattenJSON(body []byte) (map[string]string, bool) {
