@@ -14,9 +14,9 @@ type RequestTemplate struct {
 
 // ResponseFeatures holds deterministic response observations that can later be
 // promoted into baseline evidence when they prove stable across samples.
-// Slice 1 records these features without changing discovery decisions.
 type ResponseFeatures struct {
 	ContentType       string
+	IsText            bool
 	LineCount         int
 	WordCount         int
 	IsHTML            bool
@@ -43,6 +43,21 @@ type BaselineProfile struct {
 	BodyLenMin      int
 	BodyLenMax      int
 	IsJSON          bool
+
+	ContentType       string
+	ContentTypeStable bool
+	IsText            bool
+	TextClassStable   bool
+	LineCountMin      int
+	LineCountMax      int
+	WordCountMin      int
+	WordCountMax      int
+	IsHTML            bool
+	HTMLClassStable   bool
+	HTMLElementMin    int
+	HTMLElementMax    int
+	HTMLStructureHash string
+	HTMLStructureStable bool
 }
 
 type Difference struct {
