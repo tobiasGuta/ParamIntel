@@ -29,12 +29,27 @@ func BuildBaseline(samples []model.Snapshot) model.BaselineProfile {
 	if len(samples) == 0 {
 		return p
 	}
-	p.StatusCode = samples[0].StatusCode
+
+	first := samples[0]
+	p.StatusCode = first.StatusCode
 	p.StatusStable = true
-	p.BodyLenMin, p.BodyLenMax = len(samples[0].Body), len(samples[0].Body)
+	p.BodyLenMin, p.BodyLenMax = len(first.Body), len(first.Body)
 	p.IsJSON = true
+
+	p.ContentType = first.Features.ContentType
+	p.ContentTypeStable = true
+	p.IsText = first.Features.IsText
+	p.TextClassStable = true
+	p.LineCountMin, p.LineCountMax = first.Features.LineCount, first.Features.LineCount
+	p.WordCountMin, p.WordCountMax = first.Features.WordCount, first.Features.WordCount
+	p.IsHTML = first.Features.IsHTML
+	p.HTMLClassStable = true
+	p.HTMLElementMin, p.HTMLElementMax = first.Features.HTMLElementCount, first.Features.HTMLElementCount
+	p.HTMLStructureHash = first.Features.HTMLStructureHash
+	p.HTMLStructureStable = first.Features.IsHTML && first.Features.HTMLStructureHash != ""
+
 	allSameBody := true
-	firstHash := hash(samples[0].Body)
+	firstHash := hash(first.Body)
 	for _, s := range samples {
 		if s.StatusCode != p.StatusCode {
 			p.StatusStable = false
@@ -54,19 +69,54 @@ func BuildBaseline(samples []model.Snapshot) model.BaselineProfile {
 		for k := range s.JSONPaths {
 			p.SeenJSONPaths[k] = struct{}{}
 		}
+
+		f := s.Features
+		if f.ContentType != p.ContentType {
+			p.ContentTypeStable = false
+		}
+		if f.IsText != p.IsText {
+			p.TextClassStable = false
+		}
+		if f.IsText {
+			if f.LineCount < p.LineCountMin {
+				p.LineCountMin = f.LineCount
+			}
+			if f.LineCount > p.LineCountMax {
+				p.LineCountMax = f.LineCount
+			}
+			if f.WordCount < p.WordCountMin {
+				p.WordCountMin = f.WordCount
+			}
+			if f.WordCount > p.WordCountMax {
+				p.WordCountMax = f.WordCount
+			}
+		}
+		if f.IsHTML != p.IsHTML {
+			p.HTMLClassStable = false
+		}
+		if f.IsHTML {
+			if f.HTMLElementCount < p.HTMLElementMin {
+				p.HTMLElementMin = f.HTMLElementCount
+			}
+			if f.HTMLElementCount > p.HTMLElementMax {
+				p.HTMLElementMax = f.HTMLElementCount
+			}
+		}
+		if !f.IsHTML || f.HTMLStructureHash == "" || f.HTMLStructureHash != p.HTMLStructureHash {
+			p.HTMLStructureStable = false
+		}
 	}
 	if allSameBody {
 		p.StableBody = firstHash
 	}
 	if p.IsJSON {
-		for k, v := range samples[0].JSONPaths {
+		for k, v := range first.JSONPaths {
 			stable := true
 			for i := 1; i < len(samples); i++ {
 				if got, ok := samples[i].JSONPaths[k]; !ok || got != v {
 					stable = false
 					break
 				}
-			}
 			if stable {
 				p.StableJSONPaths[k] = v
 			}
