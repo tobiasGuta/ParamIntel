@@ -9,11 +9,19 @@ import (
 	"strconv"
 
 	"github.com/tobiasGuta/ParamIntel/internal/model"
+	"github.com/tobiasGuta/ParamIntel/internal/responsefeatures"
 )
 
 func Snapshot(status int, headers map[string][]string, body []byte) model.Snapshot {
 	paths, ok := flattenJSON(body)
-	return model.Snapshot{StatusCode: status, Headers: headers, Body: append([]byte(nil), body...), JSONPaths: paths, IsJSON: ok}
+	return model.Snapshot{
+		StatusCode: status,
+		Headers:    headers,
+		Body:       append([]byte(nil), body...),
+		JSONPaths:  paths,
+		IsJSON:     ok,
+		Features:   responsefeatures.Extract(headers, body),
+	}
 }
 
 func BuildBaseline(samples []model.Snapshot) model.BaselineProfile {
