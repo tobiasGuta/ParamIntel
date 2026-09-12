@@ -143,6 +143,7 @@ func BuildBaseline(samples []model.Snapshot) model.BaselineProfile {
 					stable = false
 					break
 				}
+			}
 			if stable {
 				p.StableJSONPaths[k] = v
 			}
