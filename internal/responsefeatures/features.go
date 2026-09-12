@@ -22,6 +22,7 @@ func Extract(headers http.Header, body []byte) model.ResponseFeatures {
 
 	features := model.ResponseFeatures{
 		ContentType: contentType,
+		IsText:      isText,
 		IsHTML:      isHTML,
 	}
 	if isText {

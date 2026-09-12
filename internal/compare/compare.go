@@ -25,16 +25,45 @@ func Snapshot(status int, headers map[string][]string, body []byte) model.Snapsh
 }
 
 func BuildBaseline(samples []model.Snapshot) model.BaselineProfile {
-	p := model.BaselineProfile{Samples: len(samples), StableJSONPaths: map[string]string{}, SeenJSONPaths: map[string]struct{}{}}
+	p := model.BaselineProfile{
+		Samples:            len(samples),
+		StableJSONPaths:    map[string]string{},
+		SeenJSONPaths:      map[string]struct{}{},
+		StableHeaderHashes: map[string]string{},
+		SeenHeaderNames:    map[string]struct{}{},
+	}
 	if len(samples) == 0 {
 		return p
 	}
-	p.StatusCode = samples[0].StatusCode
+
+	first := samples[0]
+	p.StatusCode = first.StatusCode
 	p.StatusStable = true
-	p.BodyLenMin, p.BodyLenMax = len(samples[0].Body), len(samples[0].Body)
+	p.BodyLenMin, p.BodyLenMax = len(first.Body), len(first.Body)
 	p.IsJSON = true
+
+	p.ContentType = first.Features.ContentType
+	p.ContentTypeStable = true
+
+	p.TextMetricsAvailable = first.Features.IsText
+	if p.TextMetricsAvailable {
+		p.LineCountMin, p.LineCountMax = first.Features.LineCount, first.Features.LineCount
+		p.WordCountMin, p.WordCountMax = first.Features.WordCount, first.Features.WordCount
+	}
+
+	p.HTMLAvailable = first.Features.IsHTML && first.Features.HTMLStructureHash != ""
+	if p.HTMLAvailable {
+		p.HTMLStructureStable = true
+		p.HTMLStructureHash = first.Features.HTMLStructureHash
+		p.HTMLElementCountMin, p.HTMLElementCountMax = first.Features.HTMLElementCount, first.Features.HTMLElementCount
+	}
+
+	for name, fingerprint := range responsefeatures.HeaderFingerprints(first.Headers) {
+		p.StableHeaderHashes[name] = fingerprint
+	}
+
 	allSameBody := true
-	firstHash := hash(samples[0].Body)
+	firstHash := hash(first.Body)
 	for _, s := range samples {
 		if s.StatusCode != p.StatusCode {
 			p.StatusStable = false
@@ -54,12 +83,60 @@ func BuildBaseline(samples []model.Snapshot) model.BaselineProfile {
 		for k := range s.JSONPaths {
 			p.SeenJSONPaths[k] = struct{}{}
 		}
+
+		if s.Features.ContentType != p.ContentType {
+			p.ContentTypeStable = false
+		}
+
+		if p.TextMetricsAvailable {
+			if !s.Features.IsText {
+				p.TextMetricsAvailable = false
+			} else {
+				p.LineCountMin = minInt(p.LineCountMin, s.Features.LineCount)
+				p.LineCountMax = maxInt(p.LineCountMax, s.Features.LineCount)
+				p.WordCountMin = minInt(p.WordCountMin, s.Features.WordCount)
+				p.WordCountMax = maxInt(p.WordCountMax, s.Features.WordCount)
+			}
+		}
+
+		if p.HTMLAvailable {
+			if !s.Features.IsHTML || s.Features.HTMLStructureHash == "" {
+				p.HTMLAvailable = false
+				p.HTMLStructureStable = false
+			} else {
+				if s.Features.HTMLStructureHash != p.HTMLStructureHash {
+					p.HTMLStructureStable = false
+				}
+				p.HTMLElementCountMin = minInt(p.HTMLElementCountMin, s.Features.HTMLElementCount)
+				p.HTMLElementCountMax = maxInt(p.HTMLElementCountMax, s.Features.HTMLElementCount)
+			}
+		}
+
+		headerFingerprints := responsefeatures.HeaderFingerprints(s.Headers)
+		for name := range headerFingerprints {
+			p.SeenHeaderNames[name] = struct{}{}
+		}
+		for name, expected := range p.StableHeaderHashes {
+			if got, ok := headerFingerprints[name]; !ok || got != expected {
+				delete(p.StableHeaderHashes, name)
+			}
+		}
+	}
+
+	if !p.TextMetricsAvailable {
+		p.LineCountMin, p.LineCountMax = 0, 0
+		p.WordCountMin, p.WordCountMax = 0, 0
+	}
+	if !p.HTMLAvailable {
+		p.HTMLStructureStable = false
+		p.HTMLStructureHash = ""
+		p.HTMLElementCountMin, p.HTMLElementCountMax = 0, 0
 	}
 	if allSameBody {
 		p.StableBody = firstHash
 	}
 	if p.IsJSON {
-		for k, v := range samples[0].JSONPaths {
+		for k, v := range first.JSONPaths {
 			stable := true
 			for i := 1; i < len(samples); i++ {
 				if got, ok := samples[i].JSONPaths[k]; !ok || got != v {
@@ -173,6 +250,20 @@ func stringsJoin(parts []string, sep string) string {
 		b = append(b, p...)
 	}
 	return string(b)
+}
+
+func minInt(a, b int) int {
+	if b < a {
+		return b
+	}
+	return a
+}
+
+func maxInt(a, b int) int {
+	if b > a {
+		return b
+	}
+	return a
 }
 
 func hash(b []byte) string { s := sha256.Sum256(b); return hex.EncodeToString(s[:]) }

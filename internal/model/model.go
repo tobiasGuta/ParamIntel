@@ -14,9 +14,9 @@ type RequestTemplate struct {
 
 // ResponseFeatures holds deterministic response observations that can later be
 // promoted into baseline evidence when they prove stable across samples.
-// Slice 1 records these features without changing discovery decisions.
 type ResponseFeatures struct {
 	ContentType       string
+	IsText            bool
 	LineCount         int
 	WordCount         int
 	IsHTML            bool
@@ -43,6 +43,27 @@ type BaselineProfile struct {
 	BodyLenMin      int
 	BodyLenMax      int
 	IsJSON          bool
+
+	ContentType       string
+	ContentTypeStable bool
+
+	TextMetricsAvailable bool
+	LineCountMin         int
+	LineCountMax         int
+	WordCountMin         int
+	WordCountMax         int
+
+	HTMLAvailable        bool
+	HTMLStructureStable  bool
+	HTMLStructureHash    string
+	HTMLElementCountMin  int
+	HTMLElementCountMax  int
+
+	// StableHeaderHashes stores only deterministic hashes of eligible response
+	// header values. Raw header values are deliberately not copied into the
+	// baseline evidence profile.
+	StableHeaderHashes map[string]string
+	SeenHeaderNames    map[string]struct{}
 }
 
 type Difference struct {
