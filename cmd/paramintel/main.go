@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	version                  = "0.6.0-dev"
+	version                  = "0.6.0"
 	defaultAIProviderTimeout = 2 * time.Minute
 )
 
