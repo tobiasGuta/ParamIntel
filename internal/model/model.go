@@ -12,12 +12,25 @@ type RequestTemplate struct {
 	Body    []byte
 }
 
+// ResponseFeatures holds deterministic response observations that can later be
+// promoted into baseline evidence when they prove stable across samples.
+// Slice 1 records these features without changing discovery decisions.
+type ResponseFeatures struct {
+	ContentType       string
+	LineCount         int
+	WordCount         int
+	IsHTML            bool
+	HTMLElementCount  int
+	HTMLStructureHash string
+}
+
 type Snapshot struct {
 	StatusCode int
 	Headers    http.Header
 	Body       []byte
 	JSONPaths  map[string]string
 	IsJSON     bool
+	Features   ResponseFeatures
 }
 
 type BaselineProfile struct {
