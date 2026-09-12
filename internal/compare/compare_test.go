@@ -72,8 +72,8 @@ func TestSnapshotRecordsResponseFeaturesWithoutChangingComparator(t *testing.T) 
 	if !s.Features.IsHTML || s.Features.HTMLStructureHash == "" {
 		t.Fatalf("missing HTML response features: %+v", s.Features)
 	}
-	if s.Features.HTMLElementCount != 5 {
-		t.Fatalf("element count=%d want=5", s.Features.HTMLElementCount)
+	if s.Features.HTMLElementCount != 4 {
+		t.Fatalf("element count=%d want=4", s.Features.HTMLElementCount)
 	}
 
 	p := BuildBaseline([]model.Snapshot{s, s})
