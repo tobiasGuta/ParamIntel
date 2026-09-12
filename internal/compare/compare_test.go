@@ -1,6 +1,7 @@
 package compare
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/tobiasGuta/ParamIntel/internal/model"
@@ -57,5 +58,35 @@ func TestUnstableBaselineStatusIsIgnored(t *testing.T) {
 	got := AgainstBaseline(p, Snapshot(201, nil, []byte(`{"ok":true}`)))
 	if got.Meaningful {
 		t.Fatalf("unstable status alone should not be evidence: %+v", got)
+	}
+}
+
+func TestSnapshotRecordsResponseFeaturesWithoutChangingComparator(t *testing.T) {
+	headers := http.Header{"Content-Type": []string{"text/html; charset=utf-8"}}
+	body := []byte("<html><body><main><p>member</p></main></body></html>")
+	s := Snapshot(200, headers, body)
+
+	if s.Features.ContentType != "text/html" {
+		t.Fatalf("content type=%q want=text/html", s.Features.ContentType)
+	}
+	if !s.Features.IsHTML || s.Features.HTMLStructureHash == "" {
+		t.Fatalf("missing HTML response features: %+v", s.Features)
+	}
+	if s.Features.HTMLElementCount != 5 {
+		t.Fatalf("element count=%d want=5", s.Features.HTMLElementCount)
+	}
+
+	p := BuildBaseline([]model.Snapshot{s, s})
+	changedStructureSameLength := Snapshot(200, headers, []byte("<html><body><main><div>member</div></main></body></html>"))
+	got := AgainstBaseline(p, changedStructureSameLength)
+	if !got.Meaningful {
+		// The baseline body is byte-stable here, so the pre-v0.7 body hash still
+		// detects the change. Slice 1 must not depend on the new structure hash.
+		t.Fatal("existing comparator behavior changed unexpectedly")
+	}
+	for _, d := range got.Differences {
+		if d.Kind == "html_structure_changed" {
+			t.Fatal("slice 1 must not promote HTML structure into evidence yet")
+		}
 	}
 }
