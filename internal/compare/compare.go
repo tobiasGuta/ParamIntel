@@ -143,7 +143,6 @@ func BuildBaseline(samples []model.Snapshot) model.BaselineProfile {
 					stable = false
 					break
 				}
-			}
 			if stable {
 				p.StableJSONPaths[k] = v
 			}
@@ -233,8 +232,10 @@ func compareStableResponseFeatures(p model.BaselineProfile, s model.Snapshot) []
 		return diffs
 	}
 
-	if p.HTMLAvailable && p.HTMLStructureStable && s.Features.IsHTML && s.Features.HTMLStructureHash != "" && s.Features.HTMLStructureHash != p.HTMLStructureHash {
-		diffs = append(diffs, model.Difference{Kind: "html_structure_changed"})
+	if p.HTMLAvailable && p.HTMLStructureStable {
+		if !s.Features.IsHTML || s.Features.HTMLStructureHash == "" || s.Features.HTMLStructureHash != p.HTMLStructureHash {
+			diffs = append(diffs, model.Difference{Kind: "html_structure_changed"})
+		}
 	}
 
 	if p.TextMetricsAvailable && s.Features.IsText {
