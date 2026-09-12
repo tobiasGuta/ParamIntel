@@ -12,6 +12,9 @@ func TestExtractNormalizesContentTypeAndCountsText(t *testing.T) {
 	if got.ContentType != "text/plain" {
 		t.Fatalf("content type=%q want=text/plain", got.ContentType)
 	}
+	if !got.IsText {
+		t.Fatal("plain text must be classified as textual")
+	}
 	if got.LineCount != 2 {
 		t.Fatalf("line count=%d want=2", got.LineCount)
 	}
@@ -36,6 +39,9 @@ func TestHTMLStructureIgnoresTextAttributesCommentsAndRawText(t *testing.T) {
 	a := Extract(headers, bodyA)
 	b := Extract(headers, bodyB)
 
+	if !a.IsText || !b.IsText {
+		t.Fatal("HTML must also be classified as textual")
+	}
 	if !a.IsHTML || !b.IsHTML {
 		t.Fatalf("expected HTML classification: a=%t b=%t", a.IsHTML, b.IsHTML)
 	}
@@ -65,8 +71,8 @@ func TestHTMLStructureDetectsElementChange(t *testing.T) {
 
 func TestExtractCanConservativelySniffHTMLWithoutContentType(t *testing.T) {
 	got := Extract(nil, []byte("  <!doctype html><html><body><p>hello</p></body></html>"))
-	if !got.IsHTML {
-		t.Fatal("expected conservative HTML sniff")
+	if !got.IsText || !got.IsHTML {
+		t.Fatalf("expected textual HTML sniff, got %+v", got)
 	}
 	if got.HTMLStructureHash == "" {
 		t.Fatal("expected HTML structure hash")
@@ -76,6 +82,9 @@ func TestExtractCanConservativelySniffHTMLWithoutContentType(t *testing.T) {
 func TestExplicitNonHTMLContentTypeWinsOverMarkupLookingBody(t *testing.T) {
 	headers := http.Header{"Content-Type": []string{"text/plain"}}
 	got := Extract(headers, []byte(`<html><body>shown as source</body></html>`))
+	if !got.IsText {
+		t.Fatal("text/plain must remain textual")
+	}
 	if got.IsHTML {
 		t.Fatal("explicit text/plain response must not be treated as HTML")
 	}
@@ -87,7 +96,21 @@ func TestExplicitNonHTMLContentTypeWinsOverMarkupLookingBody(t *testing.T) {
 func TestBinaryContentDoesNotProduceTextCounts(t *testing.T) {
 	headers := http.Header{"Content-Type": []string{"application/octet-stream"}}
 	got := Extract(headers, []byte{0x00, 0x01, 0x02, '\n', 'x'})
+	if got.IsText {
+		t.Fatal("binary response must not be classified as textual")
+	}
 	if got.LineCount != 0 || got.WordCount != 0 {
 		t.Fatalf("binary response unexpectedly got text counts: %+v", got)
+	}
+}
+
+func TestEmptyTextAndBinaryRemainDistinguishable(t *testing.T) {
+	emptyText := Extract(http.Header{"Content-Type": []string{"text/plain"}}, nil)
+	emptyBinary := Extract(http.Header{"Content-Type": []string{"application/octet-stream"}}, nil)
+	if !emptyText.IsText || emptyBinary.IsText {
+		t.Fatalf("text/binary classification collapsed: text=%+v binary=%+v", emptyText, emptyBinary)
+	}
+	if emptyText.LineCount != 0 || emptyBinary.LineCount != 0 {
+		t.Fatal("empty bodies should both have zero counts; IsText carries the distinction")
 	}
 }
