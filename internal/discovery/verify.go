@@ -19,7 +19,22 @@ func (e Engine) verify(ctx context.Context, tmpl model.RequestTemplate, p model.
 	if err != nil {
 		return model.ParameterResult{}, err
 	}
-	return e.verifyWithValue(ctx, tmpl, p, candidate, model.StringValue(probeToken), trials)
+	value := model.StringValue(probeToken)
+	typed := false
+	if schemaValue, ok := schemaTypedProbeValue(candidate); ok {
+		value = schemaValue
+		typed = true
+	}
+	r, err := e.verifyWithValue(ctx, tmpl, p, candidate, value, trials)
+	if err != nil {
+		return model.ParameterResult{}, err
+	}
+	if typed {
+		r.DiscoveryMode = "schema_typed"
+		r.DiscoveryValue = value.Raw
+		r.DiscoveryValueKind = value.Kind
+	}
+	return r, nil
 }
 
 // verifyWithValue runs the standard repeated candidate/control experiment with
