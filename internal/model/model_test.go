@@ -32,6 +32,31 @@ func TestCandidateJSONPath(t *testing.T) {
 	}
 }
 
+func TestCandidateRequiresJSONScaffold(t *testing.T) {
+	regular := Candidate{Name: "limit", Location: LocationJSON, JSONParent: "$.filters"}
+	if regular.RequiresJSONScaffold() {
+		t.Fatal("regular JSON candidate must not require scaffolding")
+	}
+
+	scaffold := Candidate{
+		Name:               "beta_access",
+		Location:           LocationJSON,
+		JSONParent:         "$.settings",
+		JSONScaffoldParent: "$.settings",
+	}
+	if !scaffold.RequiresJSONScaffold() {
+		t.Fatal("scaffold metadata was not recognized")
+	}
+	if scaffold.JSONPath() != "$.settings.beta_access" {
+		t.Fatalf("scaffold path=%q", scaffold.JSONPath())
+	}
+
+	nonJSON := Candidate{Name: "debug", Location: LocationQuery, JSONScaffoldParent: "$.settings"}
+	if nonJSON.RequiresJSONScaffold() {
+		t.Fatal("non-JSON candidate must never require JSON scaffolding")
+	}
+}
+
 func TestScanReportEmptyParametersSerializesArray(t *testing.T) {
 	r := ScanReport{Version: "0.2.0", Parameters: make([]ParameterResult, 0)}
 	b, err := json.Marshal(r)

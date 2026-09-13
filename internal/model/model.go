@@ -105,6 +105,13 @@ type Candidate struct {
 	Location   string
 	JSONParent string
 	Sources    []CandidateSource
+
+	// JSONScaffoldParent is set only for response-derived JSON candidates whose
+	// immediate parent object is absent from the captured request but whose own
+	// parent already exists as an object. Merely setting this field does not
+	// authorize mutation; the discovery/mutation pipeline must explicitly opt in
+	// before any missing object is created.
+	JSONScaffoldParent string
 }
 
 func (c Candidate) JSONPath() string {
@@ -115,6 +122,10 @@ func (c Candidate) JSONPath() string {
 		return "$." + c.Name
 	}
 	return c.JSONParent + "." + c.Name
+}
+
+func (c Candidate) RequiresJSONScaffold() bool {
+	return c.Location == LocationJSON && c.JSONScaffoldParent != ""
 }
 
 type ProbeValue struct {
