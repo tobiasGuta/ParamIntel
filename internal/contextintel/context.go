@@ -10,19 +10,24 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
 
-const responseOnlyPriority = 100
+const (
+	responseOnlyPriority = 100
+	scaffoldablePriority = 90
+)
 
 type Report struct {
 	ObservedProperties int
 	Actionable         []model.Candidate
+	Scaffoldable       []model.Candidate
 	SkippedExisting    int
 	SkippedNoParent    int
 }
 
 // HarvestJSONResponse derives exact JSON candidate placements from a related
-// API response. It only emits response-only properties whose parent object
-// already exists in the request body, so v0.3 never invents missing object
-// scaffolding or array mutation semantics.
+// API response. Response-only properties whose parent already exists in the
+// request remain immediately actionable. v0.8 additionally classifies a
+// narrow set of one-level-missing parents as scaffoldable metadata, but this
+// function never authorizes mutation or creates request objects itself.
 func HarvestJSONResponse(requestBody, rawResponse []byte, maxDepth int) (Report, error) {
 	if maxDepth <= 0 {
 		maxDepth = 3
@@ -46,21 +51,46 @@ func HarvestJSONResponse(requestBody, rawResponse []byte, maxDepth int) (Report,
 	sort.Slice(properties, func(i, j int) bool { return properties[i].Path < properties[j].Path })
 
 	report := Report{ObservedProperties: len(properties)}
-	seen := map[string]struct{}{}
+	actionableSeen := map[string]struct{}{}
+	scaffoldableSeen := map[string]struct{}{}
 	for _, p := range properties {
 		if _, ok := requestProperties[p.Path]; ok {
 			report.SkippedExisting++
 			continue
 		}
 		if _, ok := requestObjects[p.Parent]; !ok {
+			// Preserve the existing accounting: until the caller explicitly opts
+			// into a future scaffold-capable discovery path, this property is still
+			// skipped from active testing.
 			report.SkippedNoParent++
+			if !oneLevelScaffoldableParent(p.Parent, requestObjects, requestProperties) {
+				continue
+			}
+			key := p.Parent + "|" + p.Name
+			if _, ok := scaffoldableSeen[key]; ok {
+				continue
+			}
+			scaffoldableSeen[key] = struct{}{}
+			report.Scaffoldable = append(report.Scaffoldable, model.Candidate{
+				Name:               p.Name,
+				Location:           model.LocationJSON,
+				JSONParent:         p.Parent,
+				JSONScaffoldParent: p.Parent,
+				Sources: []model.CandidateSource{{
+					Source:       "context_response_scaffoldable_json_property",
+					Path:         p.Path,
+					ObservedType: p.ObservedType,
+					Priority:     scaffoldablePriority,
+					Reason:       "immediate parent object is response-derived and absent from request",
+				}},
+			})
 			continue
 		}
 		key := p.Parent + "|" + p.Name
-		if _, ok := seen[key]; ok {
+		if _, ok := actionableSeen[key]; ok {
 			continue
 		}
-		seen[key] = struct{}{}
+		actionableSeen[key] = struct{}{}
 		report.Actionable = append(report.Actionable, model.Candidate{
 			Name:       p.Name,
 			Location:   model.LocationJSON,
@@ -74,6 +104,36 @@ func HarvestJSONResponse(requestBody, rawResponse []byte, maxDepth int) (Report,
 		})
 	}
 	return report, nil
+}
+
+// oneLevelScaffoldableParent returns true only when the missing parent path
+// itself does not already exist as a scalar/null/array property and its direct
+// parent is an object already present in the captured request. This represents
+// exactly one missing object level without replacing existing request data.
+func oneLevelScaffoldableParent(path string, requestObjects, requestProperties map[string]struct{}) bool {
+	if path == "" || path == "$" {
+		return false
+	}
+	if _, exists := requestProperties[path]; exists {
+		return false
+	}
+	directParent := parentPath(path)
+	if directParent == "" {
+		return false
+	}
+	_, ok := requestObjects[directParent]
+	return ok
+}
+
+func parentPath(path string) string {
+	if path == "" || path == "$" || !strings.HasPrefix(path, "$.") {
+		return ""
+	}
+	i := strings.LastIndex(path, ".")
+	if i <= 0 {
+		return ""
+	}
+	return path[:i]
 }
 
 type property struct {
