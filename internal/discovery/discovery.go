@@ -231,8 +231,11 @@ func (e Engine) logVerification(r model.ParameterResult, accepted bool, minConfi
 		}
 		e.verbosef("\n")
 	}
-	if r.DiscoveryMode == "value_aware" {
+	switch r.DiscoveryMode {
+	case "value_aware":
 		e.verbosef("    discovery: value-aware using %q (%s)\n", r.DiscoveryValue, r.DiscoveryValueKind)
+	case "schema_typed":
+		e.verbosef("    discovery: schema-typed using %q (%s)\n", r.DiscoveryValue, r.DiscoveryValueKind)
 	}
 	e.verbosef("    candidate: changed %d/%d\n", r.CandidateChanged, r.CandidateTrials)
 	e.verbosef("    control:   changed %d/%d\n", r.RandomControlChanged, r.RandomControlTrials)
