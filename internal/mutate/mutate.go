@@ -14,7 +14,8 @@ import (
 
 // Apply returns a copy of tmpl with all mutations applied. Mutations must be
 // from the same logical target group when they touch JSON: the engine groups
-// JSON candidates by parent object before batching.
+// JSON candidates by parent object before batching. Scaffold-marked JSON
+// candidates additionally require an explicit per-mutation authorization.
 func Apply(tmpl model.RequestTemplate, mutations []model.Mutation) (model.RequestTemplate, error) {
 	out := model.RequestTemplate{
 		Method:  tmpl.Method,
@@ -86,8 +87,29 @@ func Apply(tmpl model.RequestTemplate, mutations []model.Mutation) (model.Reques
 		if !ok {
 			return model.RequestTemplate{}, fmt.Errorf("json discovery currently requires an object root")
 		}
+
+		createdScaffolds := map[string]struct{}{}
 		for _, m := range jsonMutations {
-			parent, err := resolveObject(obj, m.Candidate.JSONParent)
+			var parent map[string]any
+			var err error
+			if m.Candidate.RequiresJSONScaffold() {
+				if !m.AllowJSONScaffold {
+					return model.RequestTemplate{}, fmt.Errorf("JSON scaffold for %q requires explicit authorization", m.Candidate.JSONPath())
+				}
+				if m.Candidate.JSONScaffoldParent != m.Candidate.JSONParent {
+					return model.RequestTemplate{}, fmt.Errorf("JSON scaffold parent %q does not match candidate parent %q", m.Candidate.JSONScaffoldParent, m.Candidate.JSONParent)
+				}
+				if _, alreadyCreated := createdScaffolds[m.Candidate.JSONScaffoldParent]; alreadyCreated {
+					parent, err = resolveObject(obj, m.Candidate.JSONScaffoldParent)
+				} else {
+					parent, err = createOneLevelObject(obj, m.Candidate.JSONScaffoldParent)
+					if err == nil {
+						createdScaffolds[m.Candidate.JSONScaffoldParent] = struct{}{}
+					}
+				}
+			} else {
+				parent, err = resolveObject(obj, m.Candidate.JSONParent)
+			}
 			if err != nil {
 				return model.RequestTemplate{}, err
 			}
@@ -120,6 +142,39 @@ func resolveObject(root map[string]any, path string) (map[string]any, error) {
 		cur = next
 	}
 	return cur, nil
+}
+
+// createOneLevelObject creates exactly the final object component of path. Its
+// direct parent must already exist as an object and the final component must be
+// completely absent. Existing objects, nulls, scalars, and arrays are never
+// replaced. This independently enforces the same boundary used by context
+// classification rather than trusting candidate metadata alone.
+func createOneLevelObject(root map[string]any, path string) (map[string]any, error) {
+	directParent, name, err := splitParentPath(path)
+	if err != nil {
+		return nil, err
+	}
+	parent, err := resolveObject(root, directParent)
+	if err != nil {
+		return nil, fmt.Errorf("cannot scaffold JSON parent %q: %w", path, err)
+	}
+	if _, exists := parent[name]; exists {
+		return nil, fmt.Errorf("cannot scaffold JSON parent %q because it already exists", path)
+	}
+	child := map[string]any{}
+	parent[name] = child
+	return child, nil
+}
+
+func splitParentPath(path string) (string, string, error) {
+	if path == "" || path == "$" || !strings.HasPrefix(path, "$." ) {
+		return "", "", fmt.Errorf("invalid JSON scaffold path %q", path)
+	}
+	i := strings.LastIndex(path, ".")
+	if i <= 0 || i == len(path)-1 {
+		return "", "", fmt.Errorf("invalid JSON scaffold path %q", path)
+	}
+	return path[:i], path[i+1:], nil
 }
 
 func jsonValue(v model.ProbeValue) any {
