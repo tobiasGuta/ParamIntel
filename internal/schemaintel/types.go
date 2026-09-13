@@ -32,6 +32,7 @@ type PropertyDescriptor struct {
 	SchemaRef     string   `json:"schema_ref,omitempty"`
 	Object        bool     `json:"object,omitempty"`
 	Array         bool     `json:"array,omitempty"`
+	Ambiguous     bool     `json:"ambiguous,omitempty"`
 }
 
 type CandidateDescriptor struct {
@@ -55,13 +56,13 @@ type SkippedDescriptor struct {
 }
 
 type Report struct {
-	OpenAPIVersion    string               `json:"openapi_version"`
-	Operation         OperationMatch       `json:"operation"`
-	RequestMediaType  string               `json:"request_media_type"`
-	ResponseStatusKey string               `json:"response_status_key"`
-	ResponseMediaType string               `json:"response_media_type"`
-	RequestProperties []PropertyDescriptor `json:"request_properties,omitempty"`
-	ResponseProperties []PropertyDescriptor `json:"response_properties,omitempty"`
-	Candidates        []CandidateDescriptor `json:"candidates,omitempty"`
-	Skipped           []SkippedDescriptor   `json:"skipped,omitempty"`
+	OpenAPIVersion     string                `json:"openapi_version"`
+	Operation          OperationMatch        `json:"operation"`
+	RequestMediaType   string                `json:"request_media_type"`
+	ResponseStatusKey  string                `json:"response_status_key"`
+	ResponseMediaType  string                `json:"response_media_type"`
+	RequestProperties  []PropertyDescriptor  `json:"request_properties,omitempty"`
+	ResponseProperties []PropertyDescriptor  `json:"response_properties,omitempty"`
+	Candidates         []CandidateDescriptor `json:"candidates,omitempty"`
+	Skipped            []SkippedDescriptor   `json:"skipped,omitempty"`
 }
