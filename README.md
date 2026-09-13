@@ -1,43 +1,74 @@
-# ParamIntel v0.6.0
+# ParamIntel v0.7.0
 
 ParamIntel is an evidence-oriented HTTP parameter discovery and behavioral-analysis tool for authorized web security testing and bug bounty research.
 
-Instead of treating any response difference as a valid parameter, ParamIntel asks two questions:
+Instead of treating any response difference as a valid parameter, ParamIntel asks:
 
 > **Does this specific parameter produce reproducible application behavior that a random unknown parameter does not?**
 >
-> **Are the responses used to make that decision trustworthy application observations rather than known rate-limit/backoff responses?**
+> **Are the responses and response features used to make that decision stable enough to trust?**
 
-A reported parameter remains a **research lead**, not proof of a vulnerability. Authorization, business-logic impact, exploitability, and program rules still require manual validation.
+A reported parameter is a **research lead**, not proof of a vulnerability. Authorization, exploitability, business impact, and program rules still require manual validation.
 
 ## Version progression
 
-ParamIntel has evolved in four deliberate layers:
+ParamIntel has evolved in deliberate layers:
 
 - **v0.3 — better candidate names:** derive high-signal JSON candidates from a related response;
-- **v0.4 — better candidate values:** rescue clean generic misses with a small curated semantic value profile;
-- **v0.5 — better evidence integrity:** prevent definite rate-limit/backoff responses from entering the comparator and optionally pace all requests with one global policy;
-- **v0.6 — better candidate hypotheses:** optionally use an AI Candidate Advisor to propose high-signal names and placements from sanitized application structure while keeping verification deterministic.
+- **v0.4 — better candidate values:** rescue clean generic misses with bounded semantic values and same-value random-name controls;
+- **v0.5 — better evidence integrity:** keep known rate-limit/backoff responses out of evidence and optionally pace all requests;
+- **v0.6 — better candidate hypotheses:** optionally use an AI Candidate Advisor while keeping deterministic verification authoritative;
+- **v0.7 — better evidence fidelity:** learn stable response features and detect subtle non-JSON behavior without abandoning negative controls.
 
-The v0.6 rule is simple:
+The v0.7 rule is:
 
-> **AI may decide what is worth testing. Only ParamIntel's deterministic verifier may decide what behaved differently.**
+> **Only response features that prove stable during baseline collection may become new evidence. Candidate-specific behavior must still survive ParamIntel's paired random-name negative control.**
 
-## What v0.6 adds
+## What v0.7 adds
 
-- optional `-ai-advisor` candidate-hypothesis generation, disabled by default;
-- a provider-neutral internal adapter boundary, with Gemini as the first provider;
-- `gemini-3.5-flash-lite` as the default Gemini model, with `-ai-model` override support;
-- automatic reuse of one already-collected baseline response as AI context, avoiding an extra target request;
-- local sanitization before provider calls: structure is shared, raw captured traffic is not;
-- omission of hostnames, Authorization/Cookie data, query/form values, JSON primitive values, raw response text, and user wordlist names from provider input;
-- a deterministic local admission gate for malformed, duplicate, already-present, impossible, or already-covered suggestions;
-- `-ai-candidate-budget` to bound admitted AI hypotheses;
-- explicit AI provenance and audit data without allowing AI priority/reason to influence confidence;
-- a two-minute default provider timeout with no automatic retry or silent background/stored execution;
-- continued use of ParamIntel's existing negative controls, repeated verification, confidence model, pacing, and rate-limit evidence-integrity rules for every AI-suggested candidate.
+v0.7 improves observation quality rather than expanding scanner scope.
 
-The final localhost acceptance for v0.6 used a parameter named `include_archived` that normal built-in candidate acquisition did not cover. Gemini proposed it, and ParamIntel independently verified **3/3 candidate changes vs. 0/3 paired random-name control changes**, producing **1.00 HIGH** confidence and zero false findings in that acceptance run.
+New deterministic evidence can include:
+
+- normalized `Content-Type` changes;
+- eligible response headers being added, removed, or changing value;
+- stable HTML structure changes;
+- conservative line-count changes;
+- conservative word-count changes.
+
+The existing evidence model remains intact:
+
+- HTTP status changes;
+- stable JSON path additions/removals/value changes;
+- stable-body changes;
+- significant body-length changes.
+
+For JSON responses, path-level semantic comparison remains authoritative. The new HTML/text metrics are focused on non-JSON responses where raw-body comparison is more easily obscured by dynamic content.
+
+### Why this matters
+
+A dynamic page may rotate request IDs or timestamps while keeping its real application structure stable. Before v0.7, a hidden parameter that changed only HTML structure or an application-specific response header could be harder to distinguish when body bytes were already dynamic.
+
+v0.7 first learns which response features are stable across the baseline, then permits only those stable observations to become new evidence.
+
+## Evidence-fidelity acceptance
+
+The v0.7 localhost acceptance suite proves these end-to-end cases:
+
+1. **same-size HTML structural behavior** — `preview` changes HTML structure while response size, line count, and word count remain effectively unchanged;
+2. **header-only behavior** — `verbose` adds `X-Debug-Mode` while leaving the body unchanged;
+3. **rotating response noise** — request IDs change on every response without becoming evidence;
+4. **generic unknown-parameter noise** — an endpoint reacts to every unknown parameter, and ParamIntel reports zero findings because the paired random-name control reproduces the behavior;
+5. **JSON regression protection** — stable JSON path semantics still identify a real candidate while a rotating response field remains ignored.
+
+Raw custom response-header values are not copied into findings evidence. Header comparison uses local deterministic fingerprints and reports eligible header names only.
+
+See:
+
+```text
+docs/v0.7-evidence-fidelity.md
+labs/v0.7-evidence-fidelity/README.md
+```
 
 ## Discovery and evidence model
 
@@ -48,30 +79,27 @@ flowchart TD
     C --> D["Deterministic context intelligence"]
 
     B --> E["Multi-request baseline"]
-    E --> F["Candidate acquisition"]
-    D --> F
+    E --> F["Stable response-feature profile"]
+    E --> G["Candidate acquisition"]
+    D --> G
 
-    E --> G["Optional sanitized baseline context"]
-    G --> H["AI Candidate Advisor"]
-    H --> I["Local validation + AI candidate budget"]
-    I --> F
+    E --> H["Optional sanitized baseline context"]
+    H --> I["AI Candidate Advisor"]
+    I --> J["Local validation + AI candidate budget"]
+    J --> G
 
-    F --> J["Batch + recursive narrowing"]
-    J --> K["Individual generic verification"]
-    K --> L{"Confirmed?"}
-    L -->|Yes| M["Paired random-name control + confidence"]
-    L -->|Clean miss| N{"Curated semantic profile available?"}
-    N -->|Yes| O["Bounded value-aware rescue"]
-    O --> P["Same-value random-name control"]
-    P --> Q["Repeated explicit-value verification"]
-    M --> R["Confirmed parameter + provenance"]
-    Q --> R
-    R --> S["Optional characterization"]
+    G --> K["Batch + recursive narrowing"]
+    K --> L["Repeated candidate verification"]
+    L --> M["Stable-feature / JSON comparator"]
+    M --> N["Paired random-name control"]
+    N --> O["Confidence + evidence"]
+    O --> P["Confirmed parameter + provenance"]
+    P --> Q["Optional characterization"]
 
-    B --> T{"HTTP response trustworthy?"}
-    T -->|normal| U["Snapshot / comparator"]
-    T -->|429 or definite 503 backoff| V["Typed backoff error"]
-    V --> W["Abort scan; no normal report"]
+    B --> R{"HTTP response trustworthy?"}
+    R -->|normal| S["Snapshot / comparison"]
+    R -->|429 or definite 503 backoff| T["Typed backoff error"]
+    T --> U["Abort scan; no normal report"]
 ```
 
 Important invariants:
@@ -80,11 +108,35 @@ Important invariants:
 
 > **An AI suggestion is only a hypothesis until deterministic probing and controls verify candidate-specific behavior.**
 
+> **A new response feature is not evidence unless baseline sampling establishes the required stability.**
+
+## Evidence kinds
+
+Depending on response type and baseline stability, findings can contain evidence such as:
+
+```text
+status
+content_type
+header_added
+header_removed
+header_value_changed
+html_structure_changed
+line_count
+word_count
+json_path_added
+json_path_removed
+json_value_changed
+body_changed
+body_length
+```
+
+Header evidence records the header name, not the raw custom-header value. Sensitive/noisy transport and tracing headers are excluded before header evidence comparison.
+
 ## AI Candidate Advisor
 
-The advisor is opt-in. For Gemini, set the API key in the environment rather than placing it on the command line.
+The v0.6 AI Candidate Advisor remains optional and disabled by default. AI may propose candidate names and placements, but it cannot create findings or raise evidence confidence by itself.
 
-PowerShell 7:
+For Gemini, set the API key through the environment:
 
 ```powershell
 $env:GEMINI_API_KEY = Read-Host "Gemini API key" -MaskInput
@@ -104,91 +156,35 @@ Then run:
   -output .\findings.json
 ```
 
-By default, ParamIntel:
+The normal AI path:
 
-1. validates the provider configuration and key locally;
-2. collects its normal baseline;
+1. validates provider configuration locally;
+2. collects the normal baseline;
 3. reuses one already-collected baseline response;
-4. sanitizes that response and request structure locally;
+4. sanitizes request/response structure locally;
 5. asks the advisor for candidate names/placements;
 6. applies the local admission gate and budget;
-7. passes accepted hypotheses into the existing deterministic verifier.
+7. sends admitted hypotheses through the same deterministic verifier and negative controls as every other candidate.
 
-Use a different related response only when you intentionally want different AI context:
+The provider receives bounded structural metadata rather than raw captured traffic. Hostnames, Authorization/Cookie data, query/form values, JSON primitive values, raw response text, arbitrary headers, and user wordlist names are intentionally excluded.
 
-```text
--ai-context-response response.txt
-```
-
-The report records either:
-
-```json
-"context_source": "baseline_response"
-```
-
-or:
-
-```json
-"context_source": "ai_context_response"
-```
-
-### AI privacy boundary
-
-The provider can receive bounded structural metadata such as:
-
-- HTTP method;
-- sanitized URL path;
-- query/form parameter names, never their values;
-- request/response JSON property names and primitive types, never primitive values;
-- valid JSON insertion parents;
-- active discovery locations;
-- built-in candidate names used as exclusions.
-
-It intentionally does not receive:
-
-- hostname;
-- Authorization headers;
-- Cookie or Set-Cookie values;
-- API keys or bearer tokens;
-- query/form values;
-- JSON primitive values;
-- raw response text;
-- arbitrary headers;
-- user-supplied wordlist names.
-
-See `docs/v0.6-ai-candidate-advisor.md` and `docs/v0.6-ai-advisor-observability.md` for the design and audit details.
-
-## Rate-limit and backoff behavior
-
-ParamIntel rejects known limiter responses before they can become evidence.
-
-### HTTP 429
-
-Every HTTP `429 Too Many Requests` is treated as rate limiting and rejected from behavioral comparison.
-
-Example diagnostic:
+See:
 
 ```text
-error: rate limit detected: HTTP 429 (Retry-After: 2); response was not used as discovery evidence
+docs/v0.6-ai-candidate-advisor.md
+docs/v0.6-ai-advisor-observability.md
 ```
 
-### HTTP 503
+## Rate-limit and backoff integrity
 
-A `503 Service Unavailable` is treated as explicit server backoff only when accompanied by a valid `Retry-After` value.
+Known limiter/backoff responses are rejected before they can become behavioral evidence.
 
-```text
-503 + valid Retry-After
-→ server backoff
-→ response rejected from evidence
+- every HTTP `429 Too Many Requests` is treated as rate limiting;
+- HTTP `503 Service Unavailable` is treated as explicit backoff only when accompanied by a valid `Retry-After` value;
+- ordinary 503 responses without a valid `Retry-After` remain available to normal comparison;
+- ordinary 403 responses are not automatically classified as rate limiting.
 
-503 without Retry-After
-→ ordinary application response
-
-503 + malformed Retry-After
-→ ordinary application response
-```
-
-An ordinary `403` is not automatically classified as rate limiting because it may represent authorization, WAF, anti-bot, or application behavior relevant to the experiment.
+ParamIntel does not automatically retry after known backoff responses.
 
 ## Global request pacing
 
@@ -198,7 +194,7 @@ Use:
 -delay 250ms
 ```
 
-The value is a minimum interval between request starts, not an unconditional sleep after every response. The same pacing policy applies globally to baseline sampling, candidate probing, controls, value-aware rescue, and characterization.
+The value is a minimum interval between request starts. The same transport-level pacing policy applies to baseline collection, candidate probes, controls, value-aware rescue, and characterization.
 
 Default:
 
@@ -206,33 +202,17 @@ Default:
 -delay 0
 ```
 
-ParamIntel does not automatically replay requests after a known 429/503-backoff response.
-
 ## Value-aware discovery
 
-Some parameters ignore arbitrary values:
+Some parameters only react to specific values:
 
 ```text
-/api/users
-→ baseline
-
-/api/users?debug=whatever
-→ baseline
-
-/api/users?debug=true
-→ debug data added
-
-/api/users?random_name=true
-→ baseline
+?debug=whatever   -> baseline behavior
+?debug=true       -> changed behavior
+?zz_pi_random=true -> baseline behavior
 ```
 
-After a **clean generic miss**, ParamIntel can use a small curated semantic profile and compare the candidate against a same-value random-name control:
-
-```text
-debug=true
-vs
-zz_pi_<random>=true
-```
+After a clean generic miss, ParamIntel can try a small curated semantic profile while preserving same-value random-name controls.
 
 Controls:
 
@@ -241,13 +221,13 @@ Controls:
 -value-aware-budget 64
 ```
 
-The semantic budget is a hard request cap. `-characterize=false` does not disable value-aware discovery.
+The request budget is hard-bounded. `-characterize=false` does not disable value-aware discovery.
 
 ## Deterministic context intelligence
 
 A related JSON response can contribute application-specific candidate names without contributing attack values.
 
-Suppose the request contains:
+Example request:
 
 ```json
 {
@@ -257,7 +237,7 @@ Suppose the request contains:
 }
 ```
 
-and a related response contains:
+Related response:
 
 ```json
 {
@@ -268,15 +248,13 @@ and a related response contains:
 }
 ```
 
-ParamIntel can derive:
+ParamIntel can derive the response-only candidate:
 
 ```text
 $.options.include_deleted
-source: context_response_only_json_property
-observed type: boolean
 ```
 
-Context harvesting remains deliberately narrow: only JSON property keys become candidates, values are never tokenized into names, missing parent objects are not synthesized, and arrays are not traversed as insertion targets.
+Context harvesting remains deliberately narrow: only JSON property keys become candidates, missing request parents are not synthesized, response values are not tokenized into names, and arrays are not insertion targets.
 
 ## Build
 
@@ -303,7 +281,7 @@ Confirm version:
 Expected:
 
 ```text
-ParamIntel v0.6.0
+ParamIntel v0.7.0
 ```
 
 ## Basic query discovery
@@ -331,8 +309,6 @@ Run:
   -verbose `
   -output .\findings.json
 ```
-
-Use pacing only when it fits the authorized target/program rules.
 
 ## Context-response workflow
 
@@ -362,30 +338,23 @@ Use pacing only when it fits the authorized target/program rules.
 -locations query,json
 ```
 
-`auto` always includes query discovery, adds form discovery for `application/x-www-form-urlencoded`, and adds JSON discovery whenever the body parses as a JSON object.
+`auto` always includes query discovery, adds form discovery for `application/x-www-form-urlencoded`, and adds JSON discovery when the request body parses as a JSON object.
 
-Nested JSON object insertion is controlled with:
+Nested JSON object insertion is bounded with:
 
 ```text
 -json-depth 3
 ```
 
-Arrays remain intentionally outside the insertion model.
+Arrays remain outside the insertion model.
 
 ## Characterization
 
 After a parameter is confirmed, ParamIntel can optionally profile likely values and infer type hints.
 
-Examples include:
+Examples include boolean-like values, integers, common format values, and sort/order values. For JSON parameters, boolean and integer probes are sent as actual JSON types.
 
-- boolean-like: `true`, `false`, `1`, `0`;
-- integer-like: `0`, `1`, `10`, `-1`;
-- `format`: `json`, `xml`, `html`;
-- `sort` / `order`: `asc`, `desc`.
-
-For JSON parameters, boolean and integer values are sent as actual JSON types.
-
-Disable characterization:
+Disable characterization with:
 
 ```text
 -characterize=false
@@ -395,7 +364,7 @@ Disable characterization:
 
 GET, HEAD, and OPTIONS can run normally.
 
-POST, PUT, PATCH, DELETE, and other methods require explicit acknowledgement because ParamIntel replays the supplied request many times:
+POST, PUT, PATCH, DELETE, and other methods require explicit acknowledgement because ParamIntel can replay the supplied request many times:
 
 ```text
 -allow-state-changing
@@ -411,64 +380,62 @@ Automated release gates:
 go test ./...
 go vet ./...
 go test -race ./...
+go build ./cmd/paramintel
 ```
 
-v0.6 adds a reproducible localhost AI acceptance lab that compares a control run against an AI-enabled run and requires deterministic verification of `include_archived`.
+CI also performs a Windows amd64 cross-build.
 
-See:
+Reproducible acceptance material:
 
 ```text
-docs/v0.6-ai-candidate-advisor.md
-docs/v0.6-ai-advisor-observability.md
+labs/v0.7-evidence-fidelity/README.md
 labs/v0.6-ai-advisor/README.md
-```
-
-The v0.5 evidence-integrity acceptance material remains available in:
-
-```text
-VERIFICATION.txt
-docs/v0.5-rate-limit-evidence-integrity.md
 labs/v0.5-rate-limit/README.md
 ```
 
 ## Known boundaries
 
-v0.6 deliberately does **not** add:
+v0.7 deliberately does **not** add:
 
+- cache-aware probe correlation or automatic cache-buster orchestration;
+- evidence-level confidence weighting;
+- normalized dynamic-text diffing;
+- header or cookie discovery locations;
 - AI-generated semantic values;
-- automatic retry or automatic sleeping after `Retry-After`;
+- automatic retry or sleeping after `Retry-After`;
 - adaptive concurrency;
 - WAF/rate-limit inference from arbitrary 403 pages or response text;
-- cache-aware probe correlation;
 - server-side parameter-pollution mutation inside another parameter value;
 - missing-parent JSON object synthesis;
 - array insertion;
 - Burp/MCP integration;
-- broad business-state enum spraying.
+- broad business-state enum spraying;
+- automatic exploitation.
 
-Gemini is the first implemented AI provider adapter. The provider boundary is intentionally isolated so future adapters can be added without changing discovery or confidence logic.
+Gemini remains the first AI provider adapter. The provider boundary is isolated so future adapters can be added without changing discovery or confidence logic.
 
 ## Project layout
 
 ```text
-cmd/paramintel/        CLI and safety boundary
-internal/aiadvisor/    sanitized AI candidate acquisition and provider adapters
-internal/baseline/     baseline collection, send boundary, backoff classification
-internal/candidates/   generic candidate wordlists
-internal/compare/      semantic response comparison
-internal/confidence/   confidence scoring
-internal/contextintel/ structured request/response candidate intelligence
-internal/discovery/    placement, narrowing, verification, controls, semantic rescue
-internal/httppolicy/   shared request-start pacing policy
-internal/httpraw/      raw HTTP request parser
-internal/model/        shared evidence/result types
-internal/mutate/       query/form/JSON mutation engine
-internal/semantics/    type inference and curated semantic value profiles
-labs/                  reproducible local acceptance labs
+cmd/paramintel/          CLI and safety boundary
+internal/aiadvisor/      sanitized AI candidate acquisition and provider adapters
+internal/baseline/       baseline collection, send boundary, backoff classification
+internal/candidates/     generic candidate wordlists
+internal/compare/        baseline construction and semantic response comparison
+internal/confidence/     confidence scoring
+internal/contextintel/   structured request/response candidate intelligence
+internal/discovery/      placement, narrowing, verification, controls, semantic rescue
+internal/httppolicy/     shared request-start pacing policy
+internal/httpraw/        raw HTTP request parser
+internal/model/          shared evidence/result types
+internal/mutate/         query/form/JSON mutation engine
+internal/responsefeatures/ stable response-feature extraction and header fingerprinting
+internal/semantics/      type inference and curated semantic value profiles
+labs/                    reproducible local acceptance labs
 ```
 
 ## Scope and responsible use
 
-Use ParamIntel only on systems you own or are explicitly authorized to test. Respect bug bounty scope, published rate limits, forbidden actions, and data-handling rules. ParamIntel discovers and characterizes inputs; it does not automatically claim that a discovered parameter is vulnerable.
+Use ParamIntel only on systems you own or are explicitly authorized to test. Respect bug bounty scope, published rate limits, forbidden actions, and data-handling rules.
 
-Raw Burp requests and responses can contain session cookies, authorization headers, identifiers, and target data. Keep local research artifacts out of source control. The default `.gitignore` excludes `burprequests/`, `burpresponses/`, and `wordlists/` for this reason.
+Raw Burp requests and responses can contain session cookies, authorization headers, identifiers, and target data. Keep local research artifacts out of source control. The default `.gitignore` excludes `burprequests/`, `burpresponses/`, and `wordlists/`.
