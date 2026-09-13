@@ -18,6 +18,7 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/httppolicy"
 	"github.com/tobiasGuta/ParamIntel/internal/httpraw"
 	"github.com/tobiasGuta/ParamIntel/internal/model"
+	"github.com/tobiasGuta/ParamIntel/internal/schemaintel"
 )
 
 const (
@@ -26,7 +27,7 @@ const (
 )
 
 func main() {
-	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath string
+	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath, openAPIPath string
 	var aiProviderName, aiModel, aiAPIKeyEnv, aiContextResponsePath string
 	var baselineN, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget int
 	var timeout, delay, aiTimeout time.Duration
@@ -37,6 +38,7 @@ func main() {
 	flag.StringVar(&wordPath, "wordlist", "", "optional parameter wordlist")
 	flag.StringVar(&contextResponsePath, "context-response", "", "optional related raw HTTP response or JSON body used to derive high-signal JSON candidates")
 	flag.BoolVar(&jsonScaffold, "json-scaffold", false, "allow one-level response-derived JSON parent scaffolding from -context-response candidates")
+	flag.StringVar(&openAPIPath, "openapi", "", "optional local OpenAPI 3.x document used to derive deterministic JSON candidates")
 	flag.StringVar(&outPath, "output", "", "JSON output path; stdout if empty")
 	flag.StringVar(&scheme, "scheme", "https", "scheme for relative raw requests: http or https")
 	flag.StringVar(&locationSpec, "locations", "auto", "discovery locations: auto or comma-separated query,form,json")
@@ -87,6 +89,15 @@ func main() {
 	if methodMayChangeState(tmpl.Method) && !allowStateChanging {
 		fatal(fmt.Errorf("request method %s may be state-changing; confirm authorization and side-effect risk, then rerun with -allow-state-changing", tmpl.Method))
 	}
+
+	var openAPIDoc *schemaintel.Document
+	if strings.TrimSpace(openAPIPath) != "" {
+		openAPIRaw, err := os.ReadFile(openAPIPath)
+		fatal(err)
+		openAPIDoc, err = schemaintel.Parse(openAPIRaw)
+		fatal(err)
+	}
+
 	words, err := candidates.Load(wordPath)
 	fatal(err)
 
@@ -154,6 +165,30 @@ func main() {
 		fmt.Printf("    stable JSON paths: %d\n", len(profile.StableJSONPaths))
 		if delay > 0 {
 			fmt.Printf("[*] Request pacing: minimum %s between request starts\n", delay)
+		}
+	}
+
+	if openAPIDoc != nil {
+		openAPIReport, err := schemaintel.Analyze(openAPIDoc, tmpl, profile, schemaintel.DefaultConfig())
+		fatal(err)
+		openAPICandidates := schemaintel.ExistingParentCandidates(openAPIReport)
+		seeded = append(seeded, openAPICandidates...)
+		if verbose {
+			scaffoldable := 0
+			for _, descriptor := range openAPIReport.Candidates {
+				if descriptor.Placement == schemaintel.PlacementOneLevelScaffold {
+					scaffoldable++
+				}
+			}
+			fmt.Printf("[*] OpenAPI candidate intelligence\n")
+			fmt.Printf("    version: %s\n", openAPIReport.OpenAPIVersion)
+			fmt.Printf("    operation: %s %s\n", openAPIReport.Operation.Method, openAPIReport.Operation.SpecPath)
+			fmt.Printf("    request media type: %s\n", openAPIReport.RequestMediaType)
+			fmt.Printf("    response: %s %s\n", openAPIReport.ResponseStatusKey, openAPIReport.ResponseMediaType)
+			fmt.Printf("    response-only descriptors: %d\n", len(openAPIReport.Candidates))
+			fmt.Printf("    existing-parent candidates admitted: %d\n", len(openAPICandidates))
+			fmt.Printf("    scaffold descriptors withheld in Slice 2: %d\n", scaffoldable)
+			fmt.Printf("    skipped schema properties: %d\n", len(openAPIReport.Skipped))
 		}
 	}
 
