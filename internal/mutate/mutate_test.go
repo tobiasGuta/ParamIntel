@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/tobiasGuta/ParamIntel/internal/model"
@@ -72,6 +73,112 @@ func TestApplyJSONWithTextPlainContentType(t *testing.T) {
 		t.Fatal(err)
 	}
 	if body["chosen_discount"] != "probe" {
+		t.Fatalf("json=%s", out.Body)
+	}
+}
+
+func TestApplyScaffoldRequiresExplicitAuthorization(t *testing.T) {
+	tmpl := model.RequestTemplate{Method: "POST", URL: "https://example.test/api", Body: []byte(`{"profile":{"name":"tobias"}}`)}
+	candidate := model.Candidate{
+		Name:               "beta_access",
+		Location:           model.LocationJSON,
+		JSONParent:         "$.profile.settings",
+		JSONScaffoldParent: "$.profile.settings",
+	}
+	_, err := Apply(tmpl, []model.Mutation{{Candidate: candidate, Value: model.BoolValue(true)}})
+	if err == nil || !strings.Contains(err.Error(), "requires explicit authorization") {
+		t.Fatalf("expected explicit scaffold authorization error, got %v", err)
+	}
+}
+
+func TestApplyCreatesExactlyOneMissingObjectLevel(t *testing.T) {
+	tmpl := model.RequestTemplate{Method: "POST", URL: "https://example.test/api", Body: []byte(`{"profile":{"name":"tobias"}}`)}
+	candidate := model.Candidate{
+		Name:               "beta_access",
+		Location:           model.LocationJSON,
+		JSONParent:         "$.profile.settings",
+		JSONScaffoldParent: "$.profile.settings",
+	}
+	out, err := Apply(tmpl, []model.Mutation{{Candidate: candidate, Value: model.BoolValue(true), AllowJSONScaffold: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(out.Body, &got); err != nil {
+		t.Fatal(err)
+	}
+	profile := got["profile"].(map[string]any)
+	settings := profile["settings"].(map[string]any)
+	if settings["beta_access"] != true || profile["name"] != "tobias" {
+		t.Fatalf("json=%s", out.Body)
+	}
+}
+
+func TestApplyScaffoldNeverReplacesExistingParent(t *testing.T) {
+	for _, body := range []string{
+		`{"settings":null}`,
+		`{"settings":"disabled"}`,
+		`{"settings":[]}`,
+		`{"settings":{"existing":true}}`,
+	} {
+		tmpl := model.RequestTemplate{Method: "POST", URL: "https://example.test/api", Body: []byte(body)}
+		candidate := model.Candidate{
+			Name:               "beta_access",
+			Location:           model.LocationJSON,
+			JSONParent:         "$.settings",
+			JSONScaffoldParent: "$.settings",
+		}
+		_, err := Apply(tmpl, []model.Mutation{{Candidate: candidate, Value: model.BoolValue(true), AllowJSONScaffold: true}})
+		if err == nil || !strings.Contains(err.Error(), "already exists") {
+			t.Fatalf("existing parent must not be replaced: body=%s err=%v", body, err)
+		}
+	}
+}
+
+func TestApplyScaffoldRejectsTwoMissingObjectLevels(t *testing.T) {
+	tmpl := model.RequestTemplate{Method: "POST", URL: "https://example.test/api", Body: []byte(`{"name":"tobias"}`)}
+	candidate := model.Candidate{
+		Name:               "beta_access",
+		Location:           model.LocationJSON,
+		JSONParent:         "$.profile.settings",
+		JSONScaffoldParent: "$.profile.settings",
+	}
+	_, err := Apply(tmpl, []model.Mutation{{Candidate: candidate, Value: model.BoolValue(true), AllowJSONScaffold: true}})
+	if err == nil || !strings.Contains(err.Error(), "cannot scaffold JSON parent") {
+		t.Fatalf("expected multi-level scaffold rejection, got %v", err)
+	}
+}
+
+func TestApplyScaffoldRequiresMatchingParentMetadata(t *testing.T) {
+	tmpl := model.RequestTemplate{Method: "POST", URL: "https://example.test/api", Body: []byte(`{"profile":{"name":"tobias"}}`)}
+	candidate := model.Candidate{
+		Name:               "beta_access",
+		Location:           model.LocationJSON,
+		JSONParent:         "$.profile.settings",
+		JSONScaffoldParent: "$.profile.preferences",
+	}
+	_, err := Apply(tmpl, []model.Mutation{{Candidate: candidate, Value: model.BoolValue(true), AllowJSONScaffold: true}})
+	if err == nil || !strings.Contains(err.Error(), "does not match candidate parent") {
+		t.Fatalf("expected scaffold metadata mismatch rejection, got %v", err)
+	}
+}
+
+func TestApplyMultipleMutationsMayShareOneAuthorizedScaffold(t *testing.T) {
+	tmpl := model.RequestTemplate{Method: "POST", URL: "https://example.test/api", Body: []byte(`{"profile":{"name":"tobias"}}`)}
+	base := model.Candidate{Location: model.LocationJSON, JSONParent: "$.profile.settings", JSONScaffoldParent: "$.profile.settings"}
+	out, err := Apply(tmpl, []model.Mutation{
+		{Candidate: model.Candidate{Name: "beta_access", Location: base.Location, JSONParent: base.JSONParent, JSONScaffoldParent: base.JSONScaffoldParent}, Value: model.BoolValue(true), AllowJSONScaffold: true},
+		{Candidate: model.Candidate{Name: "mode", Location: base.Location, JSONParent: base.JSONParent, JSONScaffoldParent: base.JSONScaffoldParent}, Value: model.StringValue("probe"), AllowJSONScaffold: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(out.Body, &got); err != nil {
+		t.Fatal(err)
+	}
+	settings := got["profile"].(map[string]any)["settings"].(map[string]any)
+	if settings["beta_access"] != true || settings["mode"] != "probe" {
 		t.Fatalf("json=%s", out.Body)
 	}
 }
