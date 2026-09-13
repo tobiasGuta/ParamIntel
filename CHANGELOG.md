@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.7.0
+
+- Added deterministic response-feature extraction for normalized content type, text metrics, conservative HTML classification, HTML structural hashing, and eligible response-header fingerprints.
+- Baseline construction now records feature stability so only observations proven stable across baseline samples can participate in the new evidence paths.
+- Added `content_type` evidence for normalized Content-Type changes from a stable baseline.
+- Added `header_added`, `header_removed`, and `header_value_changed` evidence for eligible stable response headers. Findings report header names only; raw custom-header values and internal fingerprints are not emitted as evidence.
+- Added `html_structure_changed` evidence for stable non-JSON HTML structure changes, including same-size response changes that body-length comparison alone can miss.
+- Added conservative `line_count` and `word_count` evidence for non-JSON textual responses when probes leave the learned baseline range plus tolerance.
+- Preserved existing JSON path semantics as authoritative for JSON responses; v0.7 body metrics do not replace `json_path_added`, `json_path_removed`, or `json_value_changed` evidence.
+- Preserved the existing status, stable-body, and body-length comparison paths. v0.7 evidence is additive rather than a replacement comparator.
+- Added a conservative response-header exclusion boundary for sensitive, transport-level, cache, request-ID, correlation, and tracing headers before header evidence comparison.
+- Kept candidate/control verification and confidence scoring unchanged. New evidence kinds still require repeated candidate behavior that survives paired random-name negative controls.
+- Added end-to-end CLI acceptance proving same-size HTML structure detection, header-only behavior, rotating request-ID rejection, and no raw custom-header value leakage.
+- Added acceptance coverage proving generic unknown-parameter behavior is rejected when the paired random-name control reproduces it.
+- Added JSON regression acceptance proving stable JSON behavior remains discoverable while a rotating JSON response property stays outside evidence.
+- Added the reproducible `labs/v0.7-evidence-fidelity` localhost lab with HTML, generic-noise, and JSON scenarios plus raw request fixtures and PowerShell instructions.
+- Added `docs/v0.7-evidence-fidelity.md` documenting the evidence model, stability boundary, evidence kinds, privacy/noise handling, acceptance coverage, and deliberate release boundaries.
+- Updated the CLI/report version and release-facing documentation to `ParamIntel v0.7.0`.
+
 ## v0.6.0
 
 - Added the optional AI Candidate Advisor as a candidate-acquisition layer while preserving deterministic verification as the only authority for findings and confidence.
