@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.8.0
+
+- Added deeper structured JSON discovery through controlled one-level parent scaffolding for deterministic response-derived candidates.
+- Context intelligence now distinguishes immediately actionable JSON candidates from `Scaffoldable` candidates whose immediate parent is absent but whose direct ancestor already exists as an object in the captured request.
+- Added explicit scaffold metadata (`JSONScaffoldParent`) and `RequiresJSONScaffold()` without making metadata itself sufficient to authorize mutation.
+- Added an independent per-mutation `AllowJSONScaffold` gate so object creation must be explicitly authorized at the active mutation boundary.
+- Added a strict one-level scaffold mutator that creates only the final missing object component when its direct parent already exists as an object.
+- The scaffold path never replaces an existing object, `null`, scalar, or array, and it rejects paths that would require two or more missing object levels.
+- Added `-json-scaffold` as an explicit opt-in. It fails closed unless `-context-response` is also supplied, keeping missing-parent paths tied to deterministic response structure rather than generic guessing.
+- Generic wordlist candidates and AI Candidate Advisor hypotheses cannot acquire missing-parent scaffold authority in v0.8.
+- Scaffold candidates are isolated into one-candidate initial groups rather than being bulk-batched with ordinary contextual or dictionary probes.
+- Centralized discovery-side mutation construction so generic probing, repeated verification, paired controls, value-aware rescue, and characterization all apply the same scaffold authorization rule.
+- Preserved paired random-name control symmetry: candidate and control receive the exact same scaffold and probe value, and only the leaf parameter name changes.
+- Preserved the existing conservative confidence/control model. If behavior is caused by the new parent object or by any child under it, the paired random-name control reproduces the signal and the candidate is rejected.
+- Added end-to-end discovery tests for a real response-derived nested field, scaffold-disabled behavior, shared-parent-noise rejection, and scaffold-group isolation.
+- Added real CLI acceptance proving `$.profile.settings.beta_access` can be confirmed behind one missing parent while generic scaffold behavior is suppressed by the paired control.
+- Added the reproducible `labs/v0.8-json-scaffolding` localhost lab with candidate-specific and shared-parent-noise endpoints, raw request fixtures, a deterministic context-response fixture, and PowerShell reproduction steps.
+- Preserved the existing state-changing-method authorization gate, global pacing, known rate-limit/backoff fail-closed handling, v0.6 AI authority boundary, v0.7 evidence-fidelity model, and JSON path comparator semantics.
+- Added `docs/v0.8-controlled-json-scaffolding.md` and release-facing documentation describing the exact authorization layers, exclusions, candidate/control symmetry, and acceptance boundary.
+- Updated the CLI/report version and release-facing documentation to `ParamIntel v0.8.0`.
+
 ## v0.7.0
 
 - Added deterministic response-feature extraction for normalized content type, text metrics, conservative HTML classification, HTML structural hashing, and eligible response-header fingerprints.
