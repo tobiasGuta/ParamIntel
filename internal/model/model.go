@@ -146,6 +146,11 @@ func NullValue() ProbeValue         { return ProbeValue{Kind: "null", Raw: "null
 type Mutation struct {
 	Candidate Candidate
 	Value     ProbeValue
+
+	// AllowJSONScaffold is an explicit per-mutation authorization gate. A
+	// scaffold-marked candidate must have this set before the mutator may create
+	// its one missing object parent.
+	AllowJSONScaffold bool
 }
 
 type ValueObservation struct {
