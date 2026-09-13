@@ -22,6 +22,7 @@ type Config struct {
 	Characterize     bool
 	ValueAware       bool
 	ValueAwareBudget int
+	JSONScaffold     bool
 }
 
 type Engine struct {
@@ -54,14 +55,31 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 		cfg.ValueAwareBudget = 0
 	}
 
-	targets, err := buildTargetsWithSeeds(tmpl, words, cfg.Locations, cfg.MaxJSONDepth, seeded)
+	admittedSeeds := make([]model.Candidate, 0, len(seeded))
+	for _, seed := range seeded {
+		if seed.RequiresJSONScaffold() && !cfg.JSONScaffold {
+			continue
+		}
+		admittedSeeds = append(admittedSeeds, seed)
+	}
+
+	targets, err := buildTargetsWithSeeds(tmpl, words, cfg.Locations, cfg.MaxJSONDepth, admittedSeeds)
 	if err != nil {
 		return nil, err
 	}
 	groups := groupTargets(targets, cfg.ChunkSize)
 	e.verbosef("[*] Active locations: %s\n", strings.Join(targetLocations(targets), ","))
-	if len(seeded) > 0 {
-		e.verbosef("[*] Prioritized %d contextual candidate placements\n", len(seeded))
+	if len(admittedSeeds) > 0 {
+		e.verbosef("[*] Prioritized %d contextual candidate placements\n", len(admittedSeeds))
+	}
+	if cfg.JSONScaffold {
+		scaffoldCount := 0
+		for _, seed := range admittedSeeds {
+			if seed.RequiresJSONScaffold() {
+				scaffoldCount++
+			}
+		}
+		e.verbosef("[*] Controlled JSON scaffolding enabled: %d admitted candidates\n", scaffoldCount)
 	}
 	e.verbosef("[*] Testing %d candidate placements in %d initial groups\n", len(targets), len(groups))
 
