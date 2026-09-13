@@ -35,7 +35,7 @@ In a second PowerShell terminal:
 go build -o .\paramintel.exe .\cmd\paramintel
 ```
 
-Release builds should report `ParamIntel v0.9.0` with `./paramintel.exe -version`.
+Release builds should report `ParamIntel v0.9.0` with `.\paramintel.exe -version`.
 
 ## 3. Acceptance A — real existing-parent candidate
 
