@@ -91,6 +91,14 @@ func SendMutations(ctx context.Context, client *http.Client, tmpl model.RequestT
 		return model.Snapshot{}, err
 	}
 	req.Header = mutated.Headers.Clone()
+	// A raw Burp/mobile capture may contain an explicit Accept-Encoding value
+	// such as "gzip, deflate, br". Replaying that header verbatim disables Go's
+	// transparent gzip negotiation/decompression and can leave ParamIntel
+	// comparing encoded bytes instead of the decoded response body. Response
+	// compression is transport metadata rather than parameter-test semantics, so
+	// remove the captured value and let the configured HTTP transport negotiate
+	// a representation it can decode safely.
+	req.Header.Del("Accept-Encoding")
 	resp, err := client.Do(req)
 	if err != nil {
 		return model.Snapshot{}, err
