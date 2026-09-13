@@ -22,7 +22,7 @@ cd D:\Tools\ParamIntel
 go build -o .\paramintel.exe .\cmd\paramintel
 ```
 
-During v0.9 development, `-version` may still report `v0.8.0` until the release/version bump.
+Release builds should report `ParamIntel v0.9.0` with `.\paramintel.exe -version`.
 
 ## 2. Start the lab
 
