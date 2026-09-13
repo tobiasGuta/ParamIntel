@@ -28,11 +28,11 @@ func booleanReal(w http.ResponseWriter, r *http.Request) {
 	}
 	if raw, exists := profile["beta_access"]; exists {
 		if enabled, ok := raw.(bool); ok && enabled {
-			writeState(w, "beta")
+			writeProfile(w, map[string]any{"beta_access": true})
 			return
 		}
 	}
-	writeState(w, "normal")
+	writeProfile(w, nil)
 }
 
 func booleanNoise(w http.ResponseWriter, r *http.Request) {
@@ -45,11 +45,13 @@ func booleanNoise(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if enabled, ok := raw.(bool); ok && enabled {
-			writeState(w, "boolean-seen")
+			// Any unknown boolean produces the same response. The paired
+			// random-name control must therefore reproduce this behavior.
+			writeProfile(w, map[string]any{"beta_access": true})
 			return
 		}
 	}
-	writeState(w, "normal")
+	writeProfile(w, nil)
 }
 
 func integerReal(w http.ResponseWriter, r *http.Request) {
@@ -59,11 +61,11 @@ func integerReal(w http.ResponseWriter, r *http.Request) {
 	}
 	if raw, exists := profile["access_level"]; exists {
 		if n, ok := raw.(json.Number); ok && n.String() == "1" {
-			writeState(w, "level-one")
+			writeProfile(w, map[string]any{"access_level": 1})
 			return
 		}
 	}
-	writeState(w, "normal")
+	writeProfile(w, nil)
 }
 
 func unionCase(w http.ResponseWriter, r *http.Request) {
@@ -73,11 +75,11 @@ func unionCase(w http.ResponseWriter, r *http.Request) {
 	}
 	if raw, exists := profile["beta_access"]; exists {
 		if enabled, ok := raw.(bool); ok && enabled {
-			writeState(w, "beta")
+			writeProfile(w, map[string]any{"beta_access": true})
 			return
 		}
 	}
-	writeState(w, "normal")
+	writeProfile(w, nil)
 }
 
 func readProfile(w http.ResponseWriter, r *http.Request) (map[string]any, bool) {
@@ -92,11 +94,19 @@ func readProfile(w http.ResponseWriter, r *http.Request) (map[string]any, bool) 
 		http.Error(w, "bad json", http.StatusBadRequest)
 		return nil, false
 	}
-	profile, _ := body["profile"].(map[string]any)
+	profile, ok := body["profile"].(map[string]any)
+	if !ok {
+		http.Error(w, "profile object required", http.StatusBadRequest)
+		return nil, false
+	}
 	return profile, true
 }
 
-func writeState(w http.ResponseWriter, state string) {
+func writeProfile(w http.ResponseWriter, extras map[string]any) {
+	profile := map[string]any{"name": "tobias"}
+	for k, v := range extras {
+		profile[k] = v
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"state": state})
+	_ = json.NewEncoder(w).Encode(map[string]any{"profile": profile})
 }
