@@ -158,6 +158,12 @@ info:
   version: "1"
 paths:
   /users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     patch:
       requestBody:
         required: true
@@ -287,11 +293,23 @@ info:
   version: "1"
 paths:
   /users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
     get:
       responses:
         '200':
           description: by id
   /users/{name}:
+    parameters:
+      - name: name
+        in: path
+        required: true
+        schema:
+          type: string
     get:
       responses:
         '200':
