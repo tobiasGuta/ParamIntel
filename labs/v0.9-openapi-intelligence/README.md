@@ -35,7 +35,7 @@ In a second PowerShell terminal:
 go build -o .\paramintel.exe .\cmd\paramintel
 ```
 
-The binary may still report `v0.8.0` while v0.9 is under development. The version bump belongs to the release pass, not these feature slices.
+Release builds should report `ParamIntel v0.9.0` with `./paramintel.exe -version`.
 
 ## 3. Acceptance A — real existing-parent candidate
 
