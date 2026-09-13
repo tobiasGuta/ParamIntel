@@ -1,6 +1,7 @@
 package baseline
 
 import (
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -30,6 +31,46 @@ func TestSendPreservesExistingQueryAndAddsProbe(t *testing.T) {
 	}
 	if string(s.Body) != `{"existing":"1","probe":"yes"}` {
 		t.Fatalf("body=%s", s.Body)
+	}
+}
+
+func TestSendMutationsNormalizesCapturedAcceptEncodingAndDecodesJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The captured mobile header must not be replayed verbatim. With the
+		// standard transport, deleting it allows Go to negotiate gzip itself and
+		// transparently decode the response before ParamIntel snapshots the body.
+		if got := r.Header.Get("Accept-Encoding"); got != "gzip" {
+			t.Fatalf("accept-encoding=%q want=gzip", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Encoding", "gzip")
+		gz := gzip.NewWriter(w)
+		_, _ = io.WriteString(gz, `{"role":"member","active":true}`)
+		if err := gz.Close(); err != nil {
+			t.Fatalf("close gzip: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	tmpl := model.RequestTemplate{
+		Method: http.MethodGet,
+		URL:    srv.URL,
+		Headers: http.Header{
+			"Accept-Encoding": []string{"gzip, deflate, br"},
+		},
+	}
+	s, err := SendMutations(context.Background(), srv.Client(), tmpl, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.IsJSON {
+		t.Fatalf("snapshot should contain decoded JSON; body=%q", s.Body)
+	}
+	if got := s.JSONPaths["$.role"]; got != "s:member" {
+		t.Fatalf("role path=%q want=s:member", got)
+	}
+	if got := s.JSONPaths["$.active"]; got != "b:true" {
+		t.Fatalf("active path=%q want=b:true", got)
 	}
 }
 
