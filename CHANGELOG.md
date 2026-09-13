@@ -1,5 +1,33 @@
 # Changelog
 
+## v0.9.0
+
+- Added local OpenAPI candidate intelligence through a new `-openapi` CLI flag for OpenAPI 3.x documents.
+- Added a production OpenAPI parser based on `github.com/pb33f/libopenapi v0.25.0`, chosen after a parser spike under the Go 1.23 baseline.
+- Kept OpenAPI loading local-only: remote references, external file references, automatic specification discovery, BaseURL, and BasePath resolution remain disabled.
+- Added deterministic operation selection from the captured request method/path, including exact-path preference and fail-closed rejection of ambiguous templated matches.
+- Added request-schema selection from captured request Content-Type and response-schema selection from the stable baseline using exact status code, status class, then `default` fallback.
+- Added bounded schema walking for object properties, internal refs, `allOf`, declared types, `readOnly`, `writeOnly`, and `required` metadata.
+- Kept arrays out of candidate insertion and skipped `oneOf`/`anyOf` subtrees as ambiguous in this release.
+- Added the `openapi_response_only_json_property` candidate source for properties present in the selected response schema but absent from the selected request schema.
+- Added OpenAPI placement classification for `existing_parent` and passive `one_level_scaffold` descriptors.
+- Activated only `existing_parent` OpenAPI candidates. OpenAPI-derived scaffold descriptors remain withheld and cannot use v0.8 scaffold authority.
+- Preserved OpenAPI provenance on findings, including schema path, declared types, `readOnly`, `writeOnly`, `required`, schema reference, reason, and priority metadata.
+- Added schema-typed probing for OpenAPI response-only JSON candidates with exactly one supported scalar declaration: `boolean -> true` and `integer -> 1`.
+- Isolated schema-typed candidates in first-pass grouping so a type-correct scalar is used before narrowing and repeated verification.
+- Preserved paired random-name control symmetry for typed probes: candidate and control receive the exact same typed value and value kind; only the leaf name changes.
+- Added `discovery_mode: schema_typed`, `discovery_value`, and `discovery_value_kind` audit output for findings confirmed through the typed OpenAPI path.
+- Kept unions and ambiguous/multi-type declarations conservative. Declarations such as `[boolean, null]` do not authorize a schema-typed representative.
+- Did not consume schema `enum`, `default`, `example`, `examples`, `const`, or format-derived values.
+- Kept schema metadata outside confidence scoring: OpenAPI may influence candidate acquisition and a narrow probe type, but only live application behavior, repeated trials, paired controls, and existing evidence rules can produce a finding.
+- Added end-to-end CLI tests proving strict boolean OpenAPI candidates survive the first pass, generic boolean behavior is rejected by the typed random control, and OpenAPI scaffold descriptors remain inactive.
+- Added unit coverage for parser/ref boundaries, exact-vs-template path matching, ambiguous template rejection, response status fallback, schema walking, placement classification, typed-probe admission, and typed-group isolation.
+- Added `labs/v0.9-openapi-intelligence` manual acceptance covering real existing-parent behavior, generic-noise rejection, and withheld OpenAPI scaffolding.
+- Added `labs/v0.9-schema-typed-probes` manual acceptance covering strict boolean, generic boolean noise, strict integer, and union fallback behavior.
+- Manual Windows acceptance confirmed boolean `true` and integer `1` findings at 3/3 candidate changes versus 0/3 control changes, generic boolean behavior at 3/3 versus 3/3 was rejected, and `[boolean, null]` remained untyped with zero findings even though a direct boolean request proved the endpoint was live.
+- Preserved v0.5 rate-limit evidence integrity, v0.6 AI authority boundaries, v0.7 evidence fidelity, v0.8 controlled context-response scaffolding, state-changing-method authorization, and the existing confidence model.
+- Updated the CLI/report version and release-facing documentation to `ParamIntel v0.9.0`.
+
 ## v0.8.0
 
 - Added deeper structured JSON discovery through controlled one-level parent scaffolding for deterministic response-derived candidates.
