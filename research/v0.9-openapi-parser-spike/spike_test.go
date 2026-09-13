@@ -22,26 +22,27 @@ func loadAndValidate(spec string) (*openapi3.T, error) {
 	return doc, nil
 }
 
-func TestMustSupportOpenAPI30And31(t *testing.T) {
-	cases := []struct {
-		name    string
-		version string
-		spec    string
-	}{
-		{name: "3.0.3", version: "3.0.3", spec: spec30},
-		{name: "3.1.0", version: "3.1.0", spec: spec31},
+// kin-openapi v0.135.0 is the last release we found that preserves ParamIntel's
+// Go 1.23 baseline. It handles the OAS 3.0 fixture, but its validator rejects
+// the ordinary OAS 3.1 union type used by spec31. This is a comparison result,
+// not a production requirement we intend to weaken.
+func TestKinOpenAPIBaselineAnd31UnionLimitation(t *testing.T) {
+	doc, err := loadAndValidate(spec30)
+	if err != nil {
+		t.Fatalf("kin-openapi v0.135.0 should handle the OAS 3.0 fixture: %v", err)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			doc, err := loadAndValidate(tc.spec)
-			if err != nil {
-				t.Fatalf("required parser compatibility failed for OpenAPI %s: %v", tc.version, err)
-			}
-			if doc.OpenAPI != tc.version {
-				t.Fatalf("version=%q want=%q", doc.OpenAPI, tc.version)
-			}
-		})
+	if doc.OpenAPI != "3.0.3" {
+		t.Fatalf("version=%q want=3.0.3", doc.OpenAPI)
 	}
+
+	_, err = loadAndValidate(spec31)
+	if err == nil {
+		t.Fatal("kin-openapi v0.135.0 unexpectedly accepted the OAS 3.1 union fixture; revisit parser decision")
+	}
+	if !strings.Contains(err.Error(), `unsupported 'type' value "null"`) {
+		t.Fatalf("unexpected OAS 3.1 failure: %v", err)
+	}
+	t.Logf("SPIKE_RESULT parser=kin-openapi-v0.135.0 oas=3.1 union_type=rejected error=%q", err)
 }
 
 // OpenAPI 3.2.1 is deliberately observational in this spike. A basic document
@@ -49,10 +50,10 @@ func TestMustSupportOpenAPI30And31(t *testing.T) {
 func TestOpenAPI321CompatibilityProbe(t *testing.T) {
 	doc, err := loadAndValidate(spec321)
 	if err != nil {
-		t.Logf("SPIKE_RESULT oas=3.2.1 basic_parse_validate=rejected error=%q", err)
+		t.Logf("SPIKE_RESULT parser=kin-openapi-v0.135.0 oas=3.2.1 basic_parse_validate=rejected error=%q", err)
 		return
 	}
-	t.Logf("SPIKE_RESULT oas=3.2.1 basic_parse_validate=accepted version=%s full_semantic_support=unproven", doc.OpenAPI)
+	t.Logf("SPIKE_RESULT parser=kin-openapi-v0.135.0 oas=3.2.1 basic_parse_validate=accepted version=%s full_semantic_support=unproven", doc.OpenAPI)
 }
 
 func TestOperationSchemaTraversal(t *testing.T) {
@@ -125,7 +126,7 @@ func TestInternalReferenceCycleLoadsWithoutUnboundedTraversal(t *testing.T) {
 	}
 	// Do not recursively walk the cycle here. Production schemaintel must carry
 	// its own visited-ref/depth budget even when the parser resolves pointers.
-	t.Log("SPIKE_RESULT internal_ref_cycle=loaded production_walk_requires_visited_set")
+	t.Log("SPIKE_RESULT parser=kin-openapi-v0.135.0 internal_ref_cycle=loaded production_walk_requires_visited_set")
 }
 
 func TestExternalReferenceFailsClosed(t *testing.T) {
@@ -138,7 +139,7 @@ func TestExternalReferenceFailsClosed(t *testing.T) {
 	if !strings.Contains(err.Error(), "disallowed external reference") {
 		t.Fatalf("unexpected external-ref error: %v", err)
 	}
-	t.Logf("SPIKE_RESULT external_ref=blocked error=%q", err)
+	t.Logf("SPIKE_RESULT parser=kin-openapi-v0.135.0 external_ref=blocked error=%q", err)
 }
 
 // Ambiguous templated paths must be rejected by ParamIntel's future operation
@@ -146,10 +147,10 @@ func TestExternalReferenceFailsClosed(t *testing.T) {
 func TestAmbiguousTemplatePathsAreNotDelegatedToParser(t *testing.T) {
 	_, err := loadAndValidate(specAmbiguousPaths)
 	if err != nil {
-		t.Logf("SPIKE_RESULT ambiguous_templates parser_validation=rejected error=%q", err)
+		t.Logf("SPIKE_RESULT parser=kin-openapi-v0.135.0 ambiguous_templates parser_validation=rejected error=%q", err)
 		return
 	}
-	t.Log("SPIKE_RESULT ambiguous_templates parser_validation=accepted paramintel_matcher_must_reject_ambiguity=true")
+	t.Log("SPIKE_RESULT parser=kin-openapi-v0.135.0 ambiguous_templates parser_validation=accepted paramintel_matcher_must_reject_ambiguity=true")
 }
 
 const spec30 = `openapi: 3.0.3
