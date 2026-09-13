@@ -14,7 +14,7 @@ func (e Engine) characterize(ctx context.Context, tmpl model.RequestTemplate, p 
 	if err != nil {
 		return err
 	}
-	generic, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{{Candidate: candidate, Value: model.StringValue(probeToken)}})
+	generic, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(candidate, model.StringValue(probeToken))})
 	if err != nil {
 		return err
 	}
@@ -27,7 +27,7 @@ func (e Engine) characterize(ctx context.Context, tmpl model.RequestTemplate, p 
 	}
 
 	for _, value := range semantics.ProfileValues(candidate.Name, candidate.Location) {
-		s, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{{Candidate: candidate, Value: value}})
+		s, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(candidate, value)})
 		if err != nil {
 			return err
 		}
