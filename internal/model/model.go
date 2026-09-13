@@ -93,11 +93,16 @@ const (
 )
 
 type CandidateSource struct {
-	Source       string `json:"source"`
-	Path         string `json:"path,omitempty"`
-	ObservedType string `json:"observed_type,omitempty"`
-	Priority     int    `json:"priority,omitempty"`
-	Reason       string `json:"reason,omitempty"`
+	Source        string   `json:"source"`
+	Path          string   `json:"path,omitempty"`
+	ObservedType  string   `json:"observed_type,omitempty"`
+	Priority      int      `json:"priority,omitempty"`
+	Reason        string   `json:"reason,omitempty"`
+	DeclaredTypes []string `json:"declared_types,omitempty"`
+	ReadOnly      bool     `json:"read_only,omitempty"`
+	WriteOnly     bool     `json:"write_only,omitempty"`
+	Required      bool     `json:"required,omitempty"`
+	SchemaRef     string   `json:"schema_ref,omitempty"`
 }
 
 type Candidate struct {
