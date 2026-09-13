@@ -31,11 +31,12 @@ func main() {
 	var baselineN, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget int
 	var timeout, delay, aiTimeout time.Duration
 	var minConf float64
-	var verbose, characterize, valueAware, allowStateChanging, showVersion, aiAdvisorEnabled bool
+	var verbose, characterize, valueAware, allowStateChanging, showVersion, aiAdvisorEnabled, jsonScaffold bool
 
 	flag.StringVar(&reqPath, "request", "", "raw HTTP request file (required)")
 	flag.StringVar(&wordPath, "wordlist", "", "optional parameter wordlist")
 	flag.StringVar(&contextResponsePath, "context-response", "", "optional related raw HTTP response or JSON body used to derive high-signal JSON candidates")
+	flag.BoolVar(&jsonScaffold, "json-scaffold", false, "allow one-level response-derived JSON parent scaffolding from -context-response candidates")
 	flag.StringVar(&outPath, "output", "", "JSON output path; stdout if empty")
 	flag.StringVar(&scheme, "scheme", "https", "scheme for relative raw requests: http or https")
 	flag.StringVar(&locationSpec, "locations", "auto", "discovery locations: auto or comma-separated query,form,json")
@@ -75,6 +76,7 @@ func main() {
 	}
 	fatal(validateDelay(delay))
 	fatal(validateAIOptions(aiAdvisorEnabled, aiCandidateBudget, aiTimeout))
+	fatal(validateJSONScaffoldOptions(jsonScaffold, contextResponsePath))
 
 	locations, err := parseLocations(locationSpec)
 	fatal(err)
@@ -95,13 +97,18 @@ func main() {
 		fatal(err)
 		contextReport, err := contextintel.HarvestJSONResponse(tmpl.Body, contextRaw, jsonDepth)
 		fatal(err)
-		seeded = contextReport.Actionable
+		seeded = append(seeded, contextReport.Actionable...)
+		if jsonScaffold {
+			seeded = append(seeded, contextReport.Scaffoldable...)
+		}
 		if verbose {
 			fmt.Printf("[*] Context response intelligence\n")
 			fmt.Printf("    observed JSON properties: %d\n", contextReport.ObservedProperties)
 			fmt.Printf("    actionable response-only candidates: %d\n", len(contextReport.Actionable))
+			fmt.Printf("    one-level scaffoldable candidates: %d\n", len(contextReport.Scaffoldable))
+			fmt.Printf("    JSON scaffolding enabled: %t\n", jsonScaffold)
 			fmt.Printf("    skipped already-present properties: %d\n", contextReport.SkippedExisting)
-			fmt.Printf("    skipped candidates with missing request parent: %d\n", contextReport.SkippedNoParent)
+			fmt.Printf("    missing-parent properties not normally actionable: %d\n", contextReport.SkippedNoParent)
 		}
 	}
 
@@ -158,7 +165,9 @@ func main() {
 		// Only the static built-ins are shared with the provider as exclusions.
 		// A user-supplied wordlist remains local, but all loaded deterministic
 		// names participate in the local admission gate so AI cannot claim
-		// coverage ParamIntel already had.
+		// coverage ParamIntel already had. AI candidates never receive scaffold
+		// metadata; -json-scaffold only admits candidates classified from the
+		// deterministic context-response path above.
 		advisorInput.ExcludedCandidateNames = append([]string(nil), candidates.Builtin...)
 		advisorInput.LocalCoveredNames = append([]string(nil), words...)
 		advisorResult, err := aiadvisor.Generate(ctx, aiProvider, advisorInput, aiCandidateBudget)
@@ -188,6 +197,7 @@ func main() {
 		Characterize:     characterize,
 		ValueAware:       valueAware,
 		ValueAwareBudget: valueAwareBudget,
+		JSONScaffold:     jsonScaffold,
 	}}
 	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
 	fatal(err)
@@ -230,6 +240,16 @@ func validateAIOptions(enabled bool, candidateBudget int, timeout time.Duration)
 	}
 	if timeout <= 0 {
 		return fmt.Errorf("-ai-timeout must be greater than zero when -ai-advisor is enabled")
+	}
+	return nil
+}
+
+func validateJSONScaffoldOptions(enabled bool, contextResponsePath string) error {
+	if !enabled {
+		return nil
+	}
+	if strings.TrimSpace(contextResponsePath) == "" {
+		return fmt.Errorf("-json-scaffold requires -context-response; missing JSON parents may only come from deterministic response-derived candidates")
 	}
 	return nil
 }

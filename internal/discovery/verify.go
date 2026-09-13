@@ -24,12 +24,13 @@ func (e Engine) verify(ctx context.Context, tmpl model.RequestTemplate, p model.
 
 // verifyWithValue runs the standard repeated candidate/control experiment with
 // one explicit probe value. Candidate and random-name control always receive
-// the exact same value and value kind; only the parameter name changes.
+// the exact same value and value kind; only the parameter name changes. For a
+// scaffold candidate they also receive the exact same one-level parent object.
 func (e Engine) verifyWithValue(ctx context.Context, tmpl model.RequestTemplate, p model.BaselineProfile, candidate model.Candidate, value model.ProbeValue, trials int) (model.ParameterResult, error) {
 	candChanged, ctrlChanged := 0, 0
 	evidence := map[string]model.Difference{}
 	for i := 0; i < trials; i++ {
-		s, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{{Candidate: candidate, Value: value}})
+		s, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(candidate, value)})
 		if err != nil {
 			return model.ParameterResult{}, err
 		}
@@ -48,7 +49,9 @@ func (e Engine) verifyWithValue(ctx context.Context, tmpl model.RequestTemplate,
 		control := candidate
 		control.Name = "zz_pi_" + controlToken
 		control.Sources = nil
-		cs, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{{Candidate: control, Value: value}})
+		// JSONScaffoldParent is deliberately preserved. The candidate and
+		// negative control must differ only by leaf name, never by structure.
+		cs, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(control, value)})
 		if err != nil {
 			return model.ParameterResult{}, err
 		}

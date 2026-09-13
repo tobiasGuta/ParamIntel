@@ -95,9 +95,13 @@ func groupTargets(targets []model.Candidate, chunkSize int) [][]model.Candidate 
 		if len(c.Sources) > 0 {
 			tier = "context"
 		}
-		// Keep contextual candidates in their own first-pass groups rather than
-		// mixing them into a generic dictionary batch at the same placement.
 		placement := tier + "|" + c.Location + "|" + c.JSONParent
+		if c.RequiresJSONScaffold() {
+			// v0.8 intentionally probes scaffold candidates one at a time. A
+			// candidate-specific object creation should never be hidden inside a
+			// large contextual batch during the first implementation.
+			placement = "scaffold|" + candidateKey(c)
+		}
 		if _, ok := byPlacement[placement]; !ok {
 			order = append(order, placement)
 		}
@@ -108,7 +112,9 @@ func groupTargets(targets []model.Candidate, chunkSize int) [][]model.Candidate 
 		items := byPlacement[placement]
 		for len(items) > 0 {
 			n := chunkSize
-			if n <= 0 {
+			if strings.HasPrefix(placement, "scaffold|") {
+				n = 1
+			} else if n <= 0 {
 				n = 64
 			}
 			if len(items) < n {
@@ -152,7 +158,7 @@ func (e Engine) groupInteresting(ctx context.Context, tmpl model.RequestTemplate
 	value := model.StringValue(probeToken)
 	mutations := make([]model.Mutation, 0, len(group))
 	for _, candidate := range group {
-		mutations = append(mutations, model.Mutation{Candidate: candidate, Value: value})
+		mutations = append(mutations, e.mutation(candidate, value))
 	}
 	s, err := baseline.SendMutations(ctx, e.Client, tmpl, mutations)
 	if err != nil {

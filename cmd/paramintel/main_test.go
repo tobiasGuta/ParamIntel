@@ -80,6 +80,18 @@ func TestValidateAIOptions(t *testing.T) {
 	}
 }
 
+func TestValidateJSONScaffoldOptions(t *testing.T) {
+	if err := validateJSONScaffoldOptions(false, ""); err != nil {
+		t.Fatalf("disabled scaffolding should not require context: %v", err)
+	}
+	if err := validateJSONScaffoldOptions(true, "context.json"); err != nil {
+		t.Fatalf("valid scaffold options rejected: %v", err)
+	}
+	if err := validateJSONScaffoldOptions(true, "  "); err == nil {
+		t.Fatal("enabled scaffolding without -context-response must fail closed")
+	}
+}
+
 func TestCLIBackoffDoesNotWriteNormalReport(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "2")

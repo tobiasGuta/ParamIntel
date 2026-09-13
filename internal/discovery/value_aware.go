@@ -58,7 +58,7 @@ func (e Engine) semanticRescueCandidateBudgeted(ctx context.Context, tmpl model.
 		if !budget.reserve(1) {
 			return model.ParameterResult{}, model.ProbeValue{}, false, nil
 		}
-		s, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{{Candidate: candidate, Value: value}})
+		s, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(candidate, value)})
 		if err != nil {
 			return model.ParameterResult{}, model.ProbeValue{}, false, err
 		}
@@ -76,7 +76,7 @@ func (e Engine) semanticRescueCandidateBudgeted(ctx context.Context, tmpl model.
 		control := candidate
 		control.Name = "zz_pi_" + controlToken
 		control.Sources = nil
-		cs, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{{Candidate: control, Value: value}})
+		cs, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(control, value)})
 		if err != nil {
 			return model.ParameterResult{}, model.ProbeValue{}, false, err
 		}
