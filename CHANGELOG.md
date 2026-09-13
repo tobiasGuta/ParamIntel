@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.1
+
+- Fixed replay of Burp-captured mobile requests that explicitly advertise `Accept-Encoding` values such as `gzip, deflate, br`.
+- ParamIntel now removes the captured `Accept-Encoding` header immediately before dispatch so Go's configured HTTP transport can negotiate and transparently decode supported response compression.
+- Preserved all other captured request headers, request bodies, authorization context, mutation semantics, pacing, redirect policy, and evidence rules.
+- Added regression coverage that starts with a captured `Accept-Encoding: gzip, deflate, br` request, serves gzipped JSON, and proves ParamIntel receives decoded JSON with semantic paths intact.
+- Real-world authorized acceptance reproduced the original failure at HTTP 200 with a 943-byte encoded body and `0` stable JSON paths, then confirmed the fix on the unchanged request at HTTP 200 with a 5101-byte decoded body and `203` stable JSON paths.
+- Updated the CLI/report version and release-facing documentation to `ParamIntel v0.9.1`.
+
 ## v0.9.0
 
 - Added local OpenAPI candidate intelligence through a new `-openapi` CLI flag for OpenAPI 3.x documents.

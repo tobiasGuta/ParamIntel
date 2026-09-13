@@ -1,4 +1,4 @@
-# ParamIntel v0.9.0
+# ParamIntel v0.9.1
 
 ParamIntel is an evidence-oriented HTTP parameter discovery and behavioral-analysis tool for authorized web security testing and bug bounty research.
 
@@ -20,7 +20,8 @@ ParamIntel has evolved in deliberate layers:
 - **v0.6 — better candidate hypotheses:** optionally use an AI Candidate Advisor while keeping deterministic verification authoritative;
 - **v0.7 — better evidence fidelity:** learn stable response features and detect subtle non-JSON behavior without abandoning negative controls;
 - **v0.8 — deeper structured JSON discovery:** optionally test narrowly response-derived nested fields behind exactly one missing object parent;
-- **v0.9 — local OpenAPI candidate intelligence:** use a local OpenAPI document to derive high-signal response-only JSON hypotheses and, when unambiguous, choose safe boolean/integer probe types.
+- **v0.9 — local OpenAPI candidate intelligence:** use a local OpenAPI document to derive high-signal response-only JSON hypotheses and, when unambiguous, choose safe boolean/integer probe types;
+- **v0.9.1 — response decoding reliability:** normalize replayed `Accept-Encoding` so Burp-captured mobile requests can use Go's transparent response decoding and retain JSON-semantic evidence.
 
 The v0.9 governing rule is:
 
@@ -394,7 +395,7 @@ Confirm version:
 Expected:
 
 ```text
-ParamIntel v0.9.0
+ParamIntel v0.9.1
 ```
 
 ## Basic query discovery
