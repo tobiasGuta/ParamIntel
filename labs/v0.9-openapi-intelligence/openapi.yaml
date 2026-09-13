@@ -1,0 +1,97 @@
+openapi: 3.1.0
+info:
+  title: ParamIntel v0.9 OpenAPI Acceptance Lab
+  version: 1.0.0
+paths:
+  /real:
+    post:
+      operationId: realExistingParent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdateRequest'
+      responses:
+        '200':
+          description: Profile response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+  /noise:
+    post:
+      operationId: noiseExistingParent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdateRequest'
+      responses:
+        '200':
+          description: Profile response with generic unknown-field behavior in the lab server
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+  /scaffold:
+    post:
+      operationId: scaffoldWithheld
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdateRequest'
+      responses:
+        '200':
+          description: Profile response with a nested server-managed settings object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileSettingsResponse'
+components:
+  schemas:
+    ProfileUpdateRequest:
+      type: object
+      required:
+        - profile
+      properties:
+        profile:
+          type: object
+          required:
+            - name
+          properties:
+            name:
+              type: string
+    ProfileResponse:
+      type: object
+      required:
+        - profile
+      properties:
+        profile:
+          type: object
+          properties:
+            name:
+              type: string
+            beta_access:
+              type: boolean
+              readOnly: true
+    ProfileSettingsResponse:
+      type: object
+      required:
+        - profile
+      properties:
+        profile:
+          type: object
+          properties:
+            name:
+              type: string
+            settings:
+              type: object
+              readOnly: true
+              properties:
+                beta_access:
+                  type: boolean
+                  readOnly: true
