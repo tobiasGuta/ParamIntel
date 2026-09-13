@@ -1,0 +1,7 @@
+POST /noise HTTP/1.1
+Host: 127.0.0.1:8094
+Content-Type: application/json
+Content-Length: 29
+Connection: close
+
+{"profile":{"name":"tobias"}}
