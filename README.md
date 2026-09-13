@@ -1,8 +1,8 @@
-# ParamIntel v0.8.0
+# ParamIntel v0.9.0
 
 ParamIntel is an evidence-oriented HTTP parameter discovery and behavioral-analysis tool for authorized web security testing and bug bounty research.
 
-Instead of treating any response difference as a valid parameter, ParamIntel asks:
+Instead of treating every response difference as a valid parameter, ParamIntel asks:
 
 > **Does this specific parameter produce reproducible application behavior that a random unknown parameter does not?**
 >
@@ -19,84 +19,169 @@ ParamIntel has evolved in deliberate layers:
 - **v0.5 — better evidence integrity:** keep known rate-limit/backoff responses out of evidence and optionally pace all requests;
 - **v0.6 — better candidate hypotheses:** optionally use an AI Candidate Advisor while keeping deterministic verification authoritative;
 - **v0.7 — better evidence fidelity:** learn stable response features and detect subtle non-JSON behavior without abandoning negative controls;
-- **v0.8 — deeper structured JSON discovery:** optionally test narrowly response-derived nested fields behind exactly one missing object parent.
+- **v0.8 — deeper structured JSON discovery:** optionally test narrowly response-derived nested fields behind exactly one missing object parent;
+- **v0.9 — local OpenAPI candidate intelligence:** use a local OpenAPI document to derive high-signal response-only JSON hypotheses and, when unambiguous, choose safe boolean/integer probe types.
 
-The v0.8 rule is:
+The v0.9 governing rule is:
 
-> **ParamIntel may create exactly one missing JSON object level only for a deterministic response-derived candidate, only when its direct ancestor already exists as a request object, and only when the user explicitly enables `-json-scaffold` together with `-context-response`.**
+> **OpenAPI may tell ParamIntel what is worth testing, where it may belong, and—in a narrow scalar case—which JSON type to use. Only live application behavior, repeated trials, paired random-name controls, and existing confidence/evidence rules may produce a finding.**
 
-Scaffolding changes where a candidate can be placed. It does not create evidence, increase confidence, or bypass the normal verifier.
+Schema metadata is hypothesis input, not evidence.
 
-## What v0.8 adds
+## What v0.9 adds
 
-Before v0.8, context intelligence could see a nested response-only field such as:
+v0.9 introduces a local `-openapi` workflow for JSON APIs.
 
-```json
-{
-  "profile": {
-    "name": "tobias",
-    "settings": {
-      "beta_access": false
-    }
-  }
-}
-```
+Given a captured request and a local OpenAPI 3.x document, ParamIntel can:
 
-but if the captured request was only:
+- select the matching operation by HTTP method and request path;
+- prefer an exact concrete path over a matching template;
+- reject ambiguous template matches instead of choosing one implicitly;
+- select the request schema from the captured request Content-Type;
+- select the response schema from the stable baseline status and Content-Type;
+- compare request and response schema properties;
+- derive `openapi_response_only_json_property` candidates;
+- activate only candidates whose JSON parent already exists in the captured request;
+- preserve declared types, `readOnly`, `writeOnly`, `required`, and schema-reference metadata as provenance;
+- use a real JSON boolean `true` for a single unambiguous `boolean` declaration;
+- use a real JSON integer `1` for a single unambiguous `integer` declaration;
+- keep the paired random-name control on the exact same typed value.
 
-```json
-{
-  "profile": {
-    "name": "tobias"
-  }
-}
-```
+A schema declaration never raises confidence by itself.
 
-ParamIntel could not test:
+### OpenAPI example
+
+If the request schema contains:
 
 ```text
-$.profile.settings.beta_access
+$.profile.name
 ```
 
-because `$.profile.settings` did not exist in the request.
+and the selected response schema contains:
 
-v0.8 can classify that leaf as **scaffoldable** and, with explicit opt-in, temporarily create exactly the missing `settings` object for verification.
+```text
+$.profile.name
+$.profile.beta_access
+```
 
-Candidate:
+ParamIntel can prioritize:
+
+```text
+$.profile.beta_access
+source: openapi_response_only_json_property
+placement: existing_parent
+```
+
+If OpenAPI declares that field as exactly `boolean`, the experiment becomes:
 
 ```json
-{
-  "profile": {
-    "name": "tobias",
-    "settings": {
-      "beta_access": "probe"
-    }
-  }
-}
+candidate: {"profile":{"beta_access":true}}
+control:   {"profile":{"zz_pi_random":true}}
 ```
 
-Paired random-name control:
+Only the leaf name differs.
 
-```json
-{
-  "profile": {
-    "name": "tobias",
-    "settings": {
-      "zz_pi_random": "probe"
-    }
-  }
-}
+If the server reacts to every unknown boolean property, candidate and control both change and ParamIntel rejects the finding.
+
+## OpenAPI workflow
+
+```powershell
+.\paramintel.exe `
+  -request .\burprequests\request.txt `
+  -openapi .\openapi.yaml `
+  -scheme https `
+  -locations json `
+  -allow-state-changing `
+  -baseline 3 `
+  -trials 3 `
+  -chunk 8 `
+  -characterize=false `
+  -value-aware=false `
+  -verbose `
+  -output .\openapi-findings.json
 ```
 
-The object structure and value are identical. Only the leaf name changes.
+`-openapi` reads a local document only. ParamIntel does not discover or download specifications automatically.
 
-If simply creating `settings` or putting any child inside it changes behavior, the control reproduces the signal and ParamIntel rejects the candidate.
+### v0.9 OpenAPI boundaries
 
-## Controlled JSON scaffolding
+v0.9 deliberately does **not**:
 
-Scaffolding is disabled by default.
+- enumerate every endpoint from a specification;
+- fuzz every schema property or generate broad request matrices;
+- treat `readOnly`, `writeOnly`, `required`, or schema membership as proof of server behavior;
+- follow remote OpenAPI references;
+- follow external file references;
+- activate OpenAPI-derived one-level scaffolds;
+- use schema `enum`, `default`, `example`, `examples`, or `const` values as probes;
+- choose a typed representative for unions such as `[boolean, null]`;
+- traverse arrays for candidate insertion;
+- synthesize objects or multi-level JSON structure from OpenAPI;
+- use `oneOf` or `anyOf` subtrees as active candidates in this release.
 
-Enable it only with deterministic response context:
+OpenAPI descriptors whose parent is missing may still be classified as `one_level_scaffold`, but they remain passive in v0.9.
+
+## Schema-typed probes
+
+Typed probing is intentionally narrow.
+
+```text
+single declared boolean -> true
+single declared integer -> 1
+```
+
+Everything else remains on the existing generic path, including:
+
+```text
+string
+number
+null
+multi-type / union declarations
+objects
+arrays
+context-response candidates
+AI candidates
+generic wordlist candidates
+```
+
+Accepted schema-typed findings include audit fields such as:
+
+```text
+discovery_mode: schema_typed
+discovery_value: true
+discovery_value_kind: boolean
+```
+
+The schema type only chooses the candidate/control value. It does not change confidence scoring or verification rules.
+
+See:
+
+```text
+docs/v0.9-local-openapi-candidate-intelligence.md
+docs/v0.9-slice2-openapi-candidate-bridge.md
+docs/v0.9-slice3-schema-typed-probes.md
+labs/v0.9-openapi-intelligence/README.md
+labs/v0.9-schema-typed-probes/README.md
+```
+
+## v0.9 acceptance
+
+Automated and manual acceptance proves:
+
+1. a response-only OpenAPI field whose parent already exists can enter the normal verifier;
+2. real candidate-specific behavior can reach 3/3 candidate changes with 0/3 paired-control changes;
+3. generic unknown-field behavior is rejected when candidate and control both change;
+4. OpenAPI one-level scaffold descriptors remain withheld;
+5. an unambiguous boolean declaration can use a real JSON `true` probe from the first pass;
+6. an unambiguous integer declaration can use a real JSON `1` probe from the first pass;
+7. generic boolean behavior is rejected because the random-name control receives the same boolean value;
+8. a union such as `[boolean, null]` does not authorize schema-typed probing even when a direct manual boolean request proves the endpoint would react.
+
+## v0.8 controlled JSON scaffolding remains active
+
+v0.8 scaffolding is still available, but its authority source remains **deterministic `-context-response` structure only**.
+
+Enable it with:
 
 ```powershell
 .\paramintel.exe `
@@ -111,33 +196,11 @@ Enable it only with deterministic response context:
   -output .\findings.json
 ```
 
-`-json-scaffold` without `-context-response` fails locally before target probing.
+The rule remains:
 
-### What may be scaffolded
+> **ParamIntel may create exactly one missing JSON object level only for a deterministic response-derived candidate, only when its direct ancestor already exists as a request object, and only when the user explicitly enables `-json-scaffold` together with `-context-response`.**
 
-A response-derived candidate is eligible only when:
-
-- its immediate JSON parent is absent from the request;
-- the missing parent's direct ancestor already exists as an object;
-- exactly one object level is missing;
-- the missing parent path came from deterministic context-response structure;
-- the user enabled `-json-scaffold`.
-
-### What may not be scaffolded
-
-v0.8 will not:
-
-- create two or more missing object levels;
-- replace an existing object;
-- replace `null`;
-- replace a scalar;
-- replace an array;
-- use an array as a scaffold insertion target;
-- invent missing parent names from the generic wordlist;
-- let the AI Candidate Advisor invent missing parent paths;
-- copy response primitive values into probe values.
-
-Scaffold candidates are isolated into one-candidate initial groups rather than being bulk-batched with generic discovery.
+OpenAPI candidates do not gain this authority in v0.9.
 
 See:
 
@@ -146,54 +209,44 @@ docs/v0.8-controlled-json-scaffolding.md
 labs/v0.8-json-scaffolding/README.md
 ```
 
-## v0.8 acceptance
-
-The localhost and automated CLI acceptance suites prove:
-
-1. a response-derived nested field behind one missing parent can be confirmed;
-2. the real candidate can change 3/3 trials while the paired random-name control changes 0/3;
-3. generic behavior caused by any child under the synthesized parent is rejected when the control reproduces it;
-4. disabling scaffolding prevents scaffold candidates from being sent;
-5. existing object, `null`, scalar, and array parents are not replaced through the scaffold path;
-6. paths requiring two missing object levels are rejected;
-7. scaffold candidates remain isolated from bulk first-pass groups;
-8. the real CLI path composes with `-context-response` and the state-changing-method safety gate.
-
 ## Discovery and evidence model
 
 ```mermaid
 flowchart TD
     A["Raw authorized request"] --> B["Shared paced HTTP client"]
     A --> C["Optional related JSON response"]
-    C --> D["Deterministic context intelligence"]
-    D --> E["Actionable candidates"]
-    D --> F["One-level scaffoldable candidates"]
-    F --> G{"-json-scaffold enabled?"}
-    G -->|no| H["Skip scaffold candidates"]
-    G -->|yes| I["Isolated scaffold probes"]
+    A --> D["Optional local OpenAPI document"]
 
-    B --> J["Multi-request baseline"]
-    J --> K["Stable response-feature profile"]
-    E --> L["Candidate acquisition"]
-    I --> L
+    C --> E["Deterministic context intelligence"]
+    E --> F["Actionable candidates"]
+    E --> G["One-level scaffoldable candidates"]
+    G --> H{"-json-scaffold enabled?"}
+    H -->|no| I["Skip scaffold candidates"]
+    H -->|yes| J["Isolated scaffold probes"]
 
-    J --> M["Optional sanitized baseline context"]
-    M --> N["AI Candidate Advisor"]
-    N --> O["Local validation + AI candidate budget"]
-    O --> L
+    B --> K["Multi-request baseline"]
+    K --> L["Stable response-feature profile"]
+    D --> M["Operation + schema selection"]
+    K --> M
+    M --> N["Response-only OpenAPI candidates"]
+    N --> O["Existing-parent admission"]
+    O --> P["Optional schema-typed boolean/integer probe"]
 
-    L --> P["Batch / recursive narrowing"]
-    P --> Q["Repeated candidate verification"]
-    Q --> R["Stable-feature / JSON comparator"]
-    R --> S["Paired random-name control"]
-    S --> T["Confidence + evidence"]
-    T --> U["Confirmed parameter + provenance"]
-    U --> V["Optional characterization"]
+    K --> Q["Optional sanitized baseline context"]
+    Q --> R["AI Candidate Advisor"]
+    R --> S["Local validation + AI candidate budget"]
 
-    B --> W{"HTTP response trustworthy?"}
-    W -->|normal| X["Snapshot / comparison"]
-    W -->|429 or definite 503 backoff| Y["Typed backoff error"]
-    Y --> Z["Abort scan; no normal report"]
+    F --> T["Candidate acquisition"]
+    J --> T
+    P --> T
+    S --> T
+
+    T --> U["Batch / recursive narrowing"]
+    U --> V["Repeated candidate verification"]
+    V --> W["Stable-feature / JSON comparator"]
+    W --> X["Paired random-name control"]
+    X --> Y["Confidence + evidence"]
+    Y --> Z["Confirmed parameter + provenance"]
 ```
 
 Important invariants:
@@ -202,13 +255,13 @@ Important invariants:
 
 > **An AI suggestion is only a hypothesis until deterministic probing and controls verify candidate-specific behavior.**
 
+> **An OpenAPI declaration is only a hypothesis until deterministic probing and controls verify candidate-specific behavior.**
+
 > **A new response feature is not evidence unless baseline sampling establishes the required stability.**
 
 > **A scaffold is placement metadata, not evidence. The paired random-name control receives the same scaffold.**
 
-## v0.7 evidence fidelity remains active
-
-v0.7 added stable response-feature evidence for dynamic non-JSON responses.
+## Evidence fidelity
 
 Depending on baseline stability and response type, evidence can include:
 
@@ -230,13 +283,6 @@ body_length
 
 For JSON responses, stable JSON path semantics remain authoritative. Header evidence records eligible header names rather than raw custom-header values.
 
-See:
-
-```text
-docs/v0.7-evidence-fidelity.md
-labs/v0.7-evidence-fidelity/README.md
-```
-
 ## Deterministic context intelligence
 
 A related JSON response can contribute application-specific candidate names without contributing attack values.
@@ -245,17 +291,15 @@ If the response contains a property absent from the request:
 
 - parent already exists in the request → **actionable** candidate;
 - exactly one parent object is missing and its ancestor exists → **scaffoldable** candidate;
-- deeper/mismatched structure → skipped.
+- deeper or mismatched structure → skipped.
 
 Response text values are never tokenized into candidate names.
 
-Without `-json-scaffold`, the v0.3 behavior remains: only candidates whose parent already exists are active.
-
 ## AI Candidate Advisor
 
-The v0.6 AI Candidate Advisor remains optional and disabled by default. AI may propose candidate names and valid placements, but it cannot create findings or raise evidence confidence by itself.
+The AI Candidate Advisor remains optional and disabled by default. AI may propose candidate names and valid placements, but it cannot create findings or raise evidence confidence by itself.
 
-AI candidates do **not** receive v0.8 scaffold authority. Missing-parent scaffolding is reserved for deterministic `-context-response` classification.
+AI candidates do not receive JSON scaffold authority.
 
 For Gemini:
 
@@ -279,13 +323,6 @@ Then:
 
 The provider receives bounded structural metadata rather than raw captured traffic. Hostnames, Authorization/Cookie data, query/form values, JSON primitive values, raw response text, arbitrary headers, and user wordlist names are intentionally excluded.
 
-See:
-
-```text
-docs/v0.6-ai-candidate-advisor.md
-docs/v0.6-ai-advisor-observability.md
-```
-
 ## Rate-limit and backoff integrity
 
 Known limiter/backoff responses are rejected before they can become behavioral evidence.
@@ -305,7 +342,7 @@ Use:
 -delay 250ms
 ```
 
-The same transport-level request-start pacing policy applies to baseline collection, candidate probes, controls, scaffold probes, value-aware rescue, and characterization.
+The same transport-level request-start pacing policy applies to baseline collection, candidate probes, controls, scaffold probes, OpenAPI probes, value-aware rescue, and characterization.
 
 Default:
 
@@ -332,8 +369,6 @@ Controls:
 -value-aware-budget 64
 ```
 
-Scaffold candidates that reach value-aware discovery use the same scaffold authorization and random-control symmetry as generic verification.
-
 ## Build
 
 Requires Go 1.23+.
@@ -359,7 +394,7 @@ Confirm version:
 Expected:
 
 ```text
-ParamIntel v0.8.0
+ParamIntel v0.9.0
 ```
 
 ## Basic query discovery
@@ -378,8 +413,6 @@ ParamIntel v0.8.0
 
 ## Standard context-response workflow
 
-Without scaffolding:
-
 ```powershell
 .\paramintel.exe `
   -request .\burprequests\request.txt `
@@ -392,11 +425,7 @@ Without scaffolding:
   -output .\findings.json
 ```
 
-This keeps the original rule: contextual nested candidates are active only when their parent object already exists in the request.
-
 ## Deeper JSON context workflow
-
-With controlled one-level scaffolding:
 
 ```powershell
 .\paramintel.exe `
@@ -457,7 +486,7 @@ POST, PUT, PATCH, DELETE, and other methods require explicit acknowledgement bec
 -allow-state-changing
 ```
 
-`-json-scaffold` does not bypass this requirement.
+Neither `-openapi` nor `-json-scaffold` bypasses this requirement.
 
 Use ParamIntel only after confirming authorization and side-effect risk.
 
@@ -477,6 +506,8 @@ CI also performs a Windows amd64 cross-build.
 Reproducible acceptance material:
 
 ```text
+labs/v0.9-openapi-intelligence/README.md
+labs/v0.9-schema-typed-probes/README.md
 labs/v0.8-json-scaffolding/README.md
 labs/v0.7-evidence-fidelity/README.md
 labs/v0.6-ai-advisor/README.md
@@ -485,8 +516,14 @@ labs/v0.5-rate-limit/README.md
 
 ## Known boundaries
 
-v0.8 deliberately does **not** add:
+v0.9 deliberately does **not** add:
 
+- generic API endpoint enumeration from OpenAPI;
+- broad schema fuzzing;
+- remote/external OpenAPI reference loading;
+- OpenAPI-derived JSON scaffold activation;
+- schema enum/default/example/const value spraying;
+- typed probing for ambiguous unions or arbitrary schema formats;
 - multi-level missing-parent JSON synthesis;
 - array insertion or array scaffolding;
 - replacement of existing `null`, scalar, object, or array parents through scaffolding;
@@ -515,12 +552,13 @@ internal/candidates/       generic candidate wordlists
 internal/compare/          baseline construction and semantic response comparison
 internal/confidence/       confidence scoring
 internal/contextintel/     structured request/response candidate + scaffold classification
-internal/discovery/        placement, narrowing, verification, controls, scaffold gating
+internal/discovery/        placement, narrowing, verification, controls, typed-probe gating
 internal/httppolicy/       shared request-start pacing policy
 internal/httpraw/          raw HTTP request parser
 internal/model/            shared evidence/result/candidate types
 internal/mutate/           query/form/JSON mutation and controlled scaffold primitive
 internal/responsefeatures/ stable response-feature extraction and header fingerprinting
+internal/schemaintel/      local OpenAPI parsing, operation/schema matching, candidate descriptors
 internal/semantics/        type inference and curated semantic value profiles
 labs/                      reproducible local acceptance labs
 ```
