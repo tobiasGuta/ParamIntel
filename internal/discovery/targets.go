@@ -101,6 +101,11 @@ func groupTargets(targets []model.Candidate, chunkSize int) [][]model.Candidate 
 			// candidate-specific object creation should never be hidden inside a
 			// large contextual batch during the first implementation.
 			placement = "scaffold|" + candidateKey(c)
+		} else if _, ok := schemaTypedProbeKind(c); ok {
+			// Schema-typed probes must survive the first-pass filter using their
+			// declared scalar kind. Isolate them so a boolean/integer value is
+			// never mixed into a group of generic string probes.
+			placement = "schema-typed|" + candidateKey(c)
 		}
 		if _, ok := byPlacement[placement]; !ok {
 			order = append(order, placement)
@@ -112,7 +117,7 @@ func groupTargets(targets []model.Candidate, chunkSize int) [][]model.Candidate 
 		items := byPlacement[placement]
 		for len(items) > 0 {
 			n := chunkSize
-			if strings.HasPrefix(placement, "scaffold|") {
+			if strings.HasPrefix(placement, "scaffold|") || strings.HasPrefix(placement, "schema-typed|") {
 				n = 1
 			} else if n <= 0 {
 				n = 64
@@ -156,6 +161,11 @@ func (e Engine) groupInteresting(ctx context.Context, tmpl model.RequestTemplate
 		return false, err
 	}
 	value := model.StringValue(probeToken)
+	if len(group) == 1 {
+		if typed, ok := schemaTypedProbeValue(group[0]); ok {
+			value = typed
+		}
+	}
 	mutations := make([]model.Mutation, 0, len(group))
 	for _, candidate := range group {
 		mutations = append(mutations, e.mutation(candidate, value))
