@@ -1,4 +1,4 @@
-# ParamIntel v0.9.1
+# ParamIntel v0.9.2
 
 ParamIntel is an evidence-oriented HTTP parameter discovery and behavioral-analysis tool for authorized web security testing and bug bounty research.
 
@@ -21,7 +21,8 @@ ParamIntel has evolved in deliberate layers:
 - **v0.7 — better evidence fidelity:** learn stable response features and detect subtle non-JSON behavior without abandoning negative controls;
 - **v0.8 — deeper structured JSON discovery:** optionally test narrowly response-derived nested fields behind exactly one missing object parent;
 - **v0.9 — local OpenAPI candidate intelligence:** use a local OpenAPI document to derive high-signal response-only JSON hypotheses and, when unambiguous, choose safe boolean/integer probe types;
-- **v0.9.1 — response decoding reliability:** normalize replayed `Accept-Encoding` so Burp-captured mobile requests can use Go's transparent response decoding and retain JSON-semantic evidence.
+- **v0.9.1 — response decoding reliability:** normalize replayed `Accept-Encoding` so Burp-captured mobile requests can use Go's transparent response decoding and retain JSON-semantic evidence;
+- **v0.9.2 — OpenAPI nullability consistency:** preserve nullable schema provenance and withhold schema-typed shortcuts from nullable scalar declarations.
 
 The v0.9 governing rule is:
 
@@ -43,9 +44,9 @@ Given a captured request and a local OpenAPI 3.x document, ParamIntel can:
 - compare request and response schema properties;
 - derive `openapi_response_only_json_property` candidates;
 - activate only candidates whose JSON parent already exists in the captured request;
-- preserve declared types, `readOnly`, `writeOnly`, `required`, and schema-reference metadata as provenance;
-- use a real JSON boolean `true` for a single unambiguous `boolean` declaration;
-- use a real JSON integer `1` for a single unambiguous `integer` declaration;
+- preserve declared types, `nullable`, `readOnly`, `writeOnly`, `required`, and schema-reference metadata as provenance;
+- use a real JSON boolean `true` for a single unambiguous non-nullable `boolean` declaration;
+- use a real JSON integer `1` for a single unambiguous non-nullable `integer` declaration;
 - keep the paired random-name control on the exact same typed value.
 
 A schema declaration never raises confidence by itself.
@@ -73,7 +74,7 @@ source: openapi_response_only_json_property
 placement: existing_parent
 ```
 
-If OpenAPI declares that field as exactly `boolean`, the experiment becomes:
+If OpenAPI declares that field as exactly a non-nullable `boolean`, the experiment becomes:
 
 ```json
 candidate: {"profile":{"beta_access":true}}
@@ -127,8 +128,8 @@ OpenAPI descriptors whose parent is missing may still be classified as `one_leve
 Typed probing is intentionally narrow.
 
 ```text
-single declared boolean -> true
-single declared integer -> 1
+single non-nullable declared boolean -> true
+single non-nullable declared integer -> 1
 ```
 
 Everything else remains on the existing generic path, including:
@@ -137,6 +138,7 @@ Everything else remains on the existing generic path, including:
 string
 number
 null
+nullable scalar declarations
 multi-type / union declarations
 objects
 arrays
@@ -144,6 +146,8 @@ context-response candidates
 AI candidates
 generic wordlist candidates
 ```
+
+Starting in v0.9.2, OpenAPI `nullable: true` is preserved as candidate provenance and prevents the schema-typed boolean/integer shortcut. ParamIntel does not introduce `null` as a new probe; nullable candidates simply remain on the normal verification path.
 
 Accepted schema-typed findings include audit fields such as:
 
@@ -173,10 +177,11 @@ Automated and manual acceptance proves:
 2. real candidate-specific behavior can reach 3/3 candidate changes with 0/3 paired-control changes;
 3. generic unknown-field behavior is rejected when candidate and control both change;
 4. OpenAPI one-level scaffold descriptors remain withheld;
-5. an unambiguous boolean declaration can use a real JSON `true` probe from the first pass;
-6. an unambiguous integer declaration can use a real JSON `1` probe from the first pass;
+5. an unambiguous non-nullable boolean declaration can use a real JSON `true` probe from the first pass;
+6. an unambiguous non-nullable integer declaration can use a real JSON `1` probe from the first pass;
 7. generic boolean behavior is rejected because the random-name control receives the same boolean value;
-8. a union such as `[boolean, null]` does not authorize schema-typed probing even when a direct manual boolean request proves the endpoint would react.
+8. a union such as `[boolean, null]` does not authorize schema-typed probing even when a direct manual boolean request proves the endpoint would react;
+9. `nullable: true` is preserved and does not authorize a single-type boolean/integer shortcut in v0.9.2.
 
 ## v0.8 controlled JSON scaffolding remains active
 
@@ -395,7 +400,7 @@ Confirm version:
 Expected:
 
 ```text
-ParamIntel v0.9.1
+ParamIntel v0.9.2
 ```
 
 ## Basic query discovery
