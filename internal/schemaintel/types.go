@@ -26,6 +26,7 @@ type PropertyDescriptor struct {
 	Path          string   `json:"path"`
 	Parent        string   `json:"parent"`
 	DeclaredTypes []string `json:"declared_types,omitempty"`
+	Nullable      bool     `json:"nullable,omitempty"`
 	Required      bool     `json:"required,omitempty"`
 	ReadOnly      bool     `json:"read_only,omitempty"`
 	WriteOnly     bool     `json:"write_only,omitempty"`
@@ -40,6 +41,7 @@ type CandidateDescriptor struct {
 	Path               string   `json:"path"`
 	Parent             string   `json:"parent"`
 	DeclaredTypes      []string `json:"declared_types,omitempty"`
+	Nullable           bool     `json:"nullable,omitempty"`
 	Required           bool     `json:"required,omitempty"`
 	ReadOnly           bool     `json:"read_only,omitempty"`
 	WriteOnly          bool     `json:"write_only,omitempty"`
