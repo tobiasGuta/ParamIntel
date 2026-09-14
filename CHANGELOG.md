@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.9.2
+
+- Fixed inconsistent schema-typed probe eligibility for nullable OpenAPI scalar properties.
+- Preserved OpenAPI `nullable` metadata through schema property descriptors, candidate descriptors, and finding provenance.
+- Schema-typed boolean/integer shortcuts now require an unambiguous **non-nullable** scalar declaration; nullable scalars fall back to the normal generic verification path.
+- OpenAPI 3.0 `type: boolean` plus `nullable: true` and mixed/legacy OpenAPI 3.1 documents using the same form no longer receive a schema-typed `true` shortcut merely because `schema.Type` contains one scalar.
+- Preserved existing conservative handling for OpenAPI 3.1 `type: [boolean, null]` unions and `anyOf`/`oneOf` ambiguity.
+- Did not add `null` as a probe value, reinterpret malformed schemas, expand OpenAPI authority, or change confidence/evidence rules.
+- Added A–D regression coverage for OpenAPI 3.0 nullable, OpenAPI 3.1 type unions, mixed 3.1 legacy nullable, and `anyOf(boolean,null)`, plus explicit non-nullable boolean/integer typed-probe regressions.
+- Updated the CLI/report version and release-facing documentation to `ParamIntel v0.9.2`.
+
 ## v0.9.1
 
 - Fixed replay of Burp-captured mobile requests that explicitly advertise `Accept-Encoding` values such as `gzip, deflate, br`.
