@@ -9,9 +9,9 @@ import (
 const openAPIResponseOnlySource = "openapi_response_only_json_property"
 
 // schemaTypedProbeKind returns a narrowly supported JSON probe kind only when
-// an OpenAPI-derived candidate has one unambiguous scalar declaration. Schema
-// metadata influences the probe value only; it never changes confidence or
-// bypasses candidate/control verification.
+// an OpenAPI-derived candidate has one unambiguous non-nullable scalar
+// declaration. Schema metadata influences the probe value only; it never
+// changes confidence or bypasses candidate/control verification.
 func schemaTypedProbeKind(candidate model.Candidate) (string, bool) {
 	if candidate.Location != model.LocationJSON {
 		return "", false
@@ -24,7 +24,7 @@ func schemaTypedProbeKind(candidate model.Candidate) (string, bool) {
 			continue
 		}
 		matched = true
-		if len(source.DeclaredTypes) != 1 {
+		if source.Nullable || len(source.DeclaredTypes) != 1 {
 			return "", false
 		}
 		kind := strings.ToLower(strings.TrimSpace(source.DeclaredTypes[0]))
