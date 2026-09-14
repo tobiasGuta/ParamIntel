@@ -134,6 +134,7 @@ func describeProperty(name, path, parent string, proxy *highbase.SchemaProxy, re
 		return PropertyDescriptor{}, nil, fmt.Errorf("build property schema at %s: no schema returned", path)
 	}
 	desc.DeclaredTypes = normalizedTypes(schema.Type)
+	desc.Nullable = schema.Nullable != nil && *schema.Nullable
 	desc.ReadOnly = schema.ReadOnly != nil && *schema.ReadOnly
 	desc.WriteOnly = schema.WriteOnly != nil && *schema.WriteOnly
 	desc.Ambiguous = len(schema.OneOf) > 0 || len(schema.AnyOf) > 0
@@ -149,6 +150,7 @@ func (s *walkState) mergeProperty(next PropertyDescriptor) {
 		return
 	}
 	current.DeclaredTypes = mergeTypes(current.DeclaredTypes, next.DeclaredTypes)
+	current.Nullable = current.Nullable || next.Nullable
 	current.Required = current.Required || next.Required
 	current.ReadOnly = current.ReadOnly || next.ReadOnly
 	current.WriteOnly = current.WriteOnly || next.WriteOnly
