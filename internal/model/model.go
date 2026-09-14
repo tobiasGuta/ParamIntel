@@ -99,6 +99,7 @@ type CandidateSource struct {
 	Priority      int      `json:"priority,omitempty"`
 	Reason        string   `json:"reason,omitempty"`
 	DeclaredTypes []string `json:"declared_types,omitempty"`
+	Nullable      bool     `json:"nullable,omitempty"`
 	ReadOnly      bool     `json:"read_only,omitempty"`
 	WriteOnly     bool     `json:"write_only,omitempty"`
 	Required      bool     `json:"required,omitempty"`
