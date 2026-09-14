@@ -22,7 +22,7 @@ func TestOpenAPINullabilitySemanticsMatrix(t *testing.T) {
 		{name: "A OAS 3.0 nullable boolean", version: "3.0.3", propertySchema: "type: boolean\nnullable: true", wantLibTypes: []string{"boolean"}, wantNullable: boolPtrForNullabilityTest(true), wantDeclaredTypes: []string{"boolean"}, wantCandidate: true},
 		{name: "B OAS 3.1 type union", version: "3.1.0", propertySchema: "type: [boolean, \"null\"]", wantLibTypes: []string{"boolean", "null"}, wantDeclaredTypes: []string{"boolean", "null"}, wantCandidate: true},
 		{name: "C OAS 3.1 legacy nullable keyword", version: "3.1.0", propertySchema: "type: boolean\nnullable: true", wantLibTypes: []string{"boolean"}, wantNullable: boolPtrForNullabilityTest(true), wantDeclaredTypes: []string{"boolean"}, wantCandidate: true},
-		{name: "D OAS 3.1 anyOf boolean null", version: "3.1.0", propertySchema: "anyOf:\n  - type: boolean\n  - type: \"null\"", wantAmbiguous: true, wantCandidate: false},
+		{name: "D OAS 3.1 anyOf boolean null", version: "3.1.0", propertySchema: "anyOf:\n  - type: boolean\n  - type: \"null\"", wantLibTypes: []string{}, wantDeclaredTypes: []string{}, wantAmbiguous: true, wantCandidate: false},
 	}
 
 	for _, tt := range tests {
