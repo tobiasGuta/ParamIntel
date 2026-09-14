@@ -111,6 +111,7 @@ func Analyze(doc *Document, tmpl model.RequestTemplate, baseline model.BaselineP
 			Path:          property.Path,
 			Parent:        property.Parent,
 			DeclaredTypes: append([]string(nil), property.DeclaredTypes...),
+			Nullable:      property.Nullable,
 			Required:      property.Required,
 			ReadOnly:      property.ReadOnly,
 			WriteOnly:     property.WriteOnly,
