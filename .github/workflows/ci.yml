@@ -9,20 +9,39 @@ permissions:
 
 jobs:
   test:
+    name: Go ${{ matrix.go }}
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        go:
+          - '1.23.x'
+          - '1.26.x'
+          - '1.27.x'
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23.x'
+          go-version: ${{ matrix.go }}
           cache: true
+
+      - name: Go version
+        run: go version
+
       - name: Test
         run: go test ./...
+
       - name: Vet
         run: go vet ./...
+
       - name: Race detector
         run: go test -race ./...
+
       - name: Build
         run: go build -trimpath -o paramintel ./cmd/paramintel
+
       - name: Windows cross-build
         run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o paramintel-windows-amd64.exe ./cmd/paramintel
