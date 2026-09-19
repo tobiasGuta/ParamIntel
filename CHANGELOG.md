@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9.3
+
+- Moved ParamIntel's supported Go baseline from Go 1.23 to Go 1.26.
+- CI now validates the full release gate on Go 1.26.x and Go 1.27.x.
+- Added an HTTP/2 transport regression proving JSON response semantics remain intact through the ParamIntel send/snapshot boundary.
+- Added a regression proving HTTP 200 responses carrying `Retry-After` remain ordinary responses and are not classified as rate-limit/backoff evidence.
+- Preserved `github.com/pb33f/libopenapi v0.25.0`; the Go runtime migration intentionally does not include an OpenAPI dependency upgrade.
+- The migration was validated first with an isolated Go 1.23 / 1.26 / 1.27 compatibility matrix before changing the supported minimum.
+
 ## v0.9.2
 
 - Fixed inconsistent schema-typed probe eligibility for nullable OpenAPI scalar properties.

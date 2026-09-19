@@ -1,4 +1,4 @@
-# ParamIntel v0.9.2
+# ParamIntel v0.9.3
 
 ParamIntel is an evidence-oriented HTTP parameter discovery and behavioral-analysis tool for authorized web security testing and bug bounty research.
 
@@ -377,7 +377,7 @@ Controls:
 
 ## Build
 
-Requires Go 1.23+.
+Requires Go 1.26+.
 
 Linux/macOS:
 
