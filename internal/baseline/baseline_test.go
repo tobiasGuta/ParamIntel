@@ -283,3 +283,73 @@ func TestRateLimitedResponseBodyIsClosed(t *testing.T) {
 		t.Fatal("rate-limited response body was not closed")
 	}
 }
+
+func TestSendMutationsHTTP2PreservesJSONSemantics(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.ProtoMajor != 2 {
+			t.Fatalf("protocol=%s want HTTP/2", r.Proto)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"transport":"h2","active":true}`)
+	}))
+	srv.EnableHTTP2 = true
+	srv.StartTLS()
+	defer srv.Close()
+
+	s, err := SendMutations(
+		context.Background(),
+		srv.Client(),
+		model.RequestTemplate{
+			Method: http.MethodGet,
+			URL:    srv.URL,
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !s.IsJSON {
+		t.Fatalf("HTTP/2 snapshot should contain JSON; body=%q", s.Body)
+	}
+	if got := s.JSONPaths["$.transport"]; got != "s:h2" {
+		t.Fatalf("transport path=%q want=s:h2", got)
+	}
+	if got := s.JSONPaths["$.active"]; got != "b:true" {
+		t.Fatalf("active path=%q want=b:true", got)
+	}
+}
+
+func TestSendMutationsDoesNotClassify200RetryAfterAsBackoff(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "60")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	s, err := SendMutations(
+		context.Background(),
+		srv.Client(),
+		model.RequestTemplate{
+			Method: http.MethodGet,
+			URL:    srv.URL,
+		},
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("HTTP 200 + Retry-After must remain ordinary evidence: %v", err)
+	}
+
+	if s.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d want=200", s.StatusCode)
+	}
+	if !s.IsJSON {
+		t.Fatalf("snapshot should contain JSON; body=%q", s.Body)
+	}
+	if got := s.JSONPaths["$.ok"]; got != "b:true" {
+		t.Fatalf("ok path=%q want=b:true", got)
+	}
+}
