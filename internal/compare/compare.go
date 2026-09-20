@@ -1,10 +1,13 @@
 package compare
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
+	"math/big"
 	"sort"
 	"strconv"
 
@@ -270,7 +273,14 @@ func outsideMetricRange(value, minValue, maxValue, minimumTolerance int) bool {
 
 func flattenJSON(body []byte) (map[string]string, bool) {
 	var v any
-	if err := json.Unmarshal(body, &v); err != nil {
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.UseNumber()
+	if err := dec.Decode(&v); err != nil {
+		return nil, false
+	}
+	// Match json.Unmarshal's single-value contract: trailing whitespace is fine,
+	// but a second JSON value must not be silently accepted.
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
 		return nil, false
 	}
 	out := map[string]string{}
@@ -301,11 +311,35 @@ func walkJSON(path string, v any, out map[string]string) {
 		out[path] = "s:" + x
 	case bool:
 		out[path] = "b:" + strconv.FormatBool(x)
-	case float64:
-		out[path] = "n:" + strconv.FormatFloat(x, 'g', -1, 64)
+	case json.Number:
+		out[path] = "n:" + normalizeJSONNumber(x)
 	default:
 		out[path] = fmt.Sprintf("%v", x)
 	}
+}
+
+func normalizeJSONNumber(n json.Number) string {
+	raw := n.String()
+
+	// Preserve the historical float64 rendering when it is exact. This keeps
+	// values such as 1, 1.0, and 1e0 semantically equivalent without allowing
+	// float64 rounding to collapse distinct large or high-precision numbers.
+	if f, err := strconv.ParseFloat(raw, 64); err == nil {
+		formatted := strconv.FormatFloat(f, 'g', -1, 64)
+		rawRat, rawOK := new(big.Rat).SetString(raw)
+		formattedRat, formattedOK := new(big.Rat).SetString(formatted)
+		if rawOK && formattedOK && rawRat.Cmp(formattedRat) == 0 {
+			return formatted
+		}
+	}
+
+	// JSON numbers are finite decimals, so Rat can represent them exactly.
+	// RatString also canonicalizes equivalent large-number spellings such as
+	// 9007199254740993 and 9007199254740993.0 to the same evidence value.
+	if exact, ok := new(big.Rat).SetString(raw); ok {
+		return exact.RatString()
+	}
+	return raw
 }
 
 func stringsJoin(parts []string, sep string) string {
