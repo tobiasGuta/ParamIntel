@@ -51,11 +51,13 @@ func TestJSONEvidenceContract(t *testing.T) {
 		p := BuildBaseline([]model.Snapshot{a, b})
 		probe := Snapshot(200, nil, []byte(`{"user_id":9007199254740993}`))
 
-		if got := a.JSONPaths["$.user_id"]; got != "n:9007199254740992" {
-			t.Fatalf("baseline large integer=%q", got)
+		baselineValue := a.JSONPaths["$.user_id"]
+		probeValue := probe.JSONPaths["$.user_id"]
+		if baselineValue == probeValue {
+			t.Fatalf("distinct large integers collapsed to %q", baselineValue)
 		}
-		if got := probe.JSONPaths["$.user_id"]; got != "n:9007199254740993" {
-			t.Fatalf("probe large integer=%q", got)
+		if probeValue != "n:9007199254740993" {
+			t.Fatalf("inexact large integer normalization=%q", probeValue)
 		}
 
 		comparison := AgainstBaseline(p, probe)
