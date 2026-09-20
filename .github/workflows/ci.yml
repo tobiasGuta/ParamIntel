@@ -44,3 +44,37 @@ jobs:
 
       - name: Windows cross-build
         run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o paramintel-windows-amd64.exe ./cmd/paramintel
+
+  json-evidence-compat:
+    name: JSON evidence (${{ matrix.label }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Go 1.26 legacy JSON
+            go: '1.26.x'
+            goexperiment: ''
+          - label: Go 1.27 JSON v2 backend
+            go: '1.27.x'
+            goexperiment: ''
+          - label: Go 1.27 legacy JSON backend
+            go: '1.27.x'
+            goexperiment: 'nojsonv2'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+
+      - name: Go version
+        run: go version
+
+      - name: JSON evidence contract
+        env:
+          GOEXPERIMENT: ${{ matrix.goexperiment }}
+        run: go test ./internal/compare -run '^TestJSONEvidenceContract$' -count=1
