@@ -131,8 +131,9 @@ func TestEvidenceGuidedRescueSpendsBudgetOnApplicationEvidenceBeforeAI(t *testin
 		MinConfidence:    .60,
 		Locations:        []string{model.LocationQuery},
 		Characterize:     false,
-		ValueAware:       true,
-		ValueAwareBudget: 8,
+		ValueAware:           true,
+		ValueAwareBudget:     8,
+		EvidenceGuidedRescue: true,
 	}}
 
 	results, err := engine.ScanWithCandidates(context.Background(), tmpl, profile, nil, seeds)
