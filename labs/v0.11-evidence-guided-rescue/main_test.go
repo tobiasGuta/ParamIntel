@@ -109,11 +109,10 @@ func TestWordlistFixturesUseRealLineBreaks(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if bytes.Contains(raw, []byte(`\n`)) {
+			if bytes.Contains(raw, []byte(`\\n`)) {
 				t.Fatalf("%s contains literal \\n escapes instead of line breaks", name)
 			}
-			lines := bytes.Split(bytes.TrimSpace(raw), []byte{'
-'})
+			lines := bytes.Split(bytes.TrimSpace(raw), []byte("\n"))
 			if len(lines) == 0 {
 				t.Fatalf("%s contains no candidates", name)
 			}
