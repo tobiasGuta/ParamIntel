@@ -89,8 +89,8 @@ func TestHeuristicPlannerStopsWhenBudgetExhausted(t *testing.T) {
 
 func TestHeuristicPlannerAbstainsWhenNoRuleMatches(t *testing.T) {
 	state := State{
-		Candidate:              CandidateState{Name: "delivery", ValueKind: "string"},
-		Evidence:               EvidenceState{Paths: []string{"$.supported_delivery_methods"}},
+		Candidate:              CandidateState{Name: "region", ValueKind: "string"},
+		Evidence:               EvidenceState{Paths: []string{"$.aliases.region"}},
 		RemainingRequestBudget: 18,
 	}
 	decision := (HeuristicPlanner{}).Decide(state)
