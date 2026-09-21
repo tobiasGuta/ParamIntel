@@ -185,6 +185,11 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 				continue
 			}
 
+			deterministicValues := semantics.ProfileValues(candidate.Name, candidate.Location)
+			if len(deterministicValues) == 0 && cfg.SemanticValueAdvisor == nil {
+				continue
+			}
+
 			shadowResult, ok := genericResults[key]
 			if !ok {
 				shadowResult = model.ParameterResult{
@@ -196,11 +201,6 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			}
 			if cfg.ResidualDecisionObserver != nil {
 				cfg.ResidualDecisionObserver(shadowResult, budget.remaining)
-			}
-
-			deterministicValues := semantics.ProfileValues(candidate.Name, candidate.Location)
-			if len(deterministicValues) == 0 && cfg.SemanticValueAdvisor == nil {
-				continue
 			}
 
 			r, value, ok, err := e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, deterministicValues, cfg.Trials, cfg.MinConfidence, budget)
