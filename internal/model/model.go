@@ -251,7 +251,9 @@ type RescueCandidateAudit struct {
 type ValueAwareSummary struct {
 	Budget              int                    `json:"budget"`
 	RequestsUsed        int                    `json:"requests_used"`
+	EligibleCandidates  int                    `json:"eligible_candidates"`
 	CandidatesAttempted int                    `json:"candidates_attempted"`
+	CandidatesDeferred  int                    `json:"candidates_deferred"`
 	VerifiedParameters  int                    `json:"verified_parameters"`
 	CandidateAudit      []RescueCandidateAudit `json:"candidate_audit,omitempty"`
 }
