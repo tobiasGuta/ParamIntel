@@ -16,7 +16,7 @@ type HeuristicDecision struct {
 func (p HeuristicPlanner) Plan(state State) Action {
 	decision := p.Decide(state)
 	if !decision.Decided {
-		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "stop rule matched"}
+		return ActionStop
 	}
 	return decision.Action
 }
