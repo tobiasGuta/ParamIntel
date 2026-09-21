@@ -1,0 +1,18 @@
+{
+  "cases": [
+    {"name":"easy-enum","state":"labs/typesafe-decision-provider/state-enum.json","expected_action":"enum_profile"},
+    {"name":"easy-boolean","state":"labs/typesafe-decision-provider/state-boolean.json","expected_action":"boolean_profile"},
+    {"name":"easy-integer","state":"labs/typesafe-decision-provider/state-integer.json","expected_action":"integer_boundary_profile"},
+    {"name":"easy-sufficient","state":"labs/typesafe-decision-provider/state-sufficient.json","expected_action":"stop"},
+    {"name":"easy-ambiguous","state":"labs/typesafe-decision-provider/state-ambiguous.json","expected_action":"stop"},
+
+    {"name":"hard-delivery-enum","state":"labs/typesafe-decision-provider/hard-delivery.json","expected_action":"enum_profile"},
+    {"name":"hard-archive-boolean","state":"labs/typesafe-decision-provider/hard-archive.json","expected_action":"boolean_profile"},
+    {"name":"hard-timeout-integer","state":"labs/typesafe-decision-provider/hard-timeout.json","expected_action":"integer_boundary_profile"},
+    {"name":"hard-locale-enum","state":"labs/typesafe-decision-provider/hard-locale.json","expected_action":"enum_profile"},
+    {"name":"hard-theme-enum","state":"labs/typesafe-decision-provider/hard-theme.json","expected_action":"enum_profile"},
+    {"name":"hard-read-only-boolean","state":"labs/typesafe-decision-provider/hard-read-only.json","expected_action":"boolean_profile"},
+    {"name":"hard-next-token-stop","state":"labs/typesafe-decision-provider/hard-next-token.json","expected_action":"stop"},
+    {"name":"hard-profile-stop","state":"labs/typesafe-decision-provider/hard-profile.json","expected_action":"stop"}
+  ]
+}
