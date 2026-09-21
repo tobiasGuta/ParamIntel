@@ -457,3 +457,45 @@ hybrid materially > STOP fallback:
 ```
 
 Do not add new deterministic rules based on holdout failures until the holdout result has been recorded.
+
+
+## Residual holdout v2
+
+The first frozen holdout demonstrated incremental Jev value over STOP fallback, but its failures were then used to clarify the action catalog. It is therefore development evidence from that point forward, not final proof.
+
+A second untouched residual holdout is frozen at:
+
+```text
+labs/typesafe-decision-provider/benchmark-holdout-v2.json
+```
+
+It contains 18 cases:
+
+- 2 enum;
+- 2 related-value;
+- 2 nullability;
+- 2 empty-value;
+- 2 case-variation;
+- 2 boolean;
+- 2 integer-boundary;
+- 4 STOP controls.
+
+The deterministic heuristic is intentionally unchanged and should abstain on these cases. The benchmark must compare:
+
+```text
+STOP-on-abstain baseline
+vs
+Jev-on-abstain hybrid
+```
+
+The runner now also reports case-level modal accuracy in addition to per-run expected-action rate.
+
+Run:
+
+```powershell
+go run .\cmd\decision-benchmark `
+  -manifest .\labs\typesafe-decision-provider\benchmark-holdout-v2.json `
+  -runs 5
+```
+
+Do not alter heuristic rules or catalog semantics before recording this result.
