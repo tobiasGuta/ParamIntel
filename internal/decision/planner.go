@@ -28,14 +28,14 @@ type Planner struct {
 
 func DefaultExperimentCatalog() []Option {
 	return []Option{
-		{Action: ActionStop, Description: "Stop characterization because the current evidence is sufficient or no bounded experiment is worth the remaining request budget."},
-		{Action: ActionEnumProfile, Description: "Test a small bounded set of enum-like application states already suggested by observed structure or local vocabulary."},
-		{Action: ActionBooleanProfile, Description: "Test true/false semantics when the candidate plausibly represents a boolean feature or switch."},
-		{Action: ActionNullabilityProfile, Description: "Test null or absence semantics when the candidate may distinguish unset from explicitly empty state."},
-		{Action: ActionIntegerBoundaryProfile, Description: "Test a bounded integer boundary set such as zero, one, and a small positive value when the candidate appears numeric."},
-		{Action: ActionEmptyValueProfile, Description: "Test an empty string or equivalent empty representation when that distinction could be meaningful."},
-		{Action: ActionCaseVariationProfile, Description: "Test bounded case variants of an already-known semantic token when the application may be case-sensitive."},
-		{Action: ActionRelatedValueProfile, Description: "Test a small bounded set of semantically related values derived from already observed application vocabulary."},
+		{Action: ActionStop, Description: "Choose when existing evidence is already sufficient, the signal is too weak or noisy to justify another experiment, the remaining request budget is too small, or no listed experiment is supported."},
+		{Action: ActionEnumProfile, Description: "Choose when evidence suggests the parameter accepts one value from a finite application-defined set, such as allowed/supported/available states, modes, languages, currencies, providers, or similar closed choices."},
+		{Action: ActionBooleanProfile, Description: "Choose when evidence suggests the parameter is a binary flag or capability with true/false, on/off, enabled/disabled, can/has/is, or equivalent two-state semantics."},
+		{Action: ActionNullabilityProfile, Description: "Choose when evidence specifically suggests null, nullable, optional, unset, missing, or explicit-null semantics. Do not use merely because an empty string might matter."},
+		{Action: ActionIntegerBoundaryProfile, Description: "Choose when evidence suggests a numeric quantity, count, limit, retry count, timeout, size, offset, minimum, maximum, or other bounded integer semantics."},
+		{Action: ActionEmptyValueProfile, Description: "Choose when evidence specifically suggests blank, empty-string, empty-value, or present-but-empty semantics. Distinguish this from null/missing and from boolean false."},
+		{Action: ActionCaseVariationProfile, Description: "Choose when evidence specifically suggests case sensitivity or case normalization for an already-known token, such as upper/lower/mixed-case handling."},
+		{Action: ActionRelatedValueProfile, Description: "Choose when evidence suggests aliases, synonyms, sibling values, or nearby application vocabulary worth testing, but does not imply a closed allowed-value set. Prefer enum_profile for finite allowed/supported/available choices."},
 	}
 }
 
@@ -60,8 +60,10 @@ func (p Planner) PlanNext(ctx context.Context, state State) (Plan, error) {
 	req := Request{
 		State:   state,
 		Options: DefaultExperimentCatalog(),
-		Instructions: "Choose the single next bounded characterization experiment that is most informative given the deterministic ParamIntel state. " +
-			"Prefer STOP when the evidence is already sufficient, the remaining request budget is too small, or none of the permitted experiments is justified. " +
+		Instructions: "Choose the single next bounded characterization experiment that is best supported by the deterministic ParamIntel state. " +
+			"Use the action definitions precisely: closed finite choices map to enum_profile; aliases or sibling vocabulary without a closed set map to related_value_profile; " +
+			"null/missing semantics map to nullability_profile; blank/empty-string semantics map to empty_value_profile; binary capability semantics map to boolean_profile. " +
+			"Prefer STOP when evidence is already sufficient, the signal is too weak/noisy, the remaining request budget is too small, or no permitted experiment is justified. " +
 			"Do not invent payloads, values, parameters, or actions outside the listed choices.",
 	}
 	result, err := p.Provider.Choose(ctx, req)
