@@ -50,7 +50,7 @@ func (HeuristicPlanner) Decide(state State) HeuristicDecision {
 	}
 
 	nameTokens := semanticTokens(state.Candidate.Name)
-	pathTokens := map[string]struct{}{
+	pathTokens := map[string]struct{}{}
 	for _, path := range state.Evidence.Paths {
 		for _, token := range semanticTokens(path) {
 			pathTokens[token] = struct{}{}
@@ -74,7 +74,6 @@ func (HeuristicPlanner) Decide(state State) HeuristicDecision {
 
 	return HeuristicDecision{Action: ActionStop, Decided: false, Reason: "no deterministic rule matched"}
 }
-
 
 
 func structuralEvidenceDecision(candidate CandidateState, evidence EvidenceState) (HeuristicDecision, bool) {
