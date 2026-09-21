@@ -168,3 +168,71 @@ func TestAIValueAdvisorPrioritizesHighSignalCandidateBeforeBudgetIsSpent(t *test
 		t.Fatalf("results=%+v", results)
 	}
 }
+
+
+func TestAIValueAuditReportsOnlyActualProviderQuery(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"role": "ROLE_USER"})
+	}))
+	defer srv.Close()
+
+	tmpl := model.RequestTemplate{Method: http.MethodGet, URL: srv.URL + "/api", Headers: make(http.Header)}
+	profile, err := baseline.Build(context.Background(), srv.Client(), tmpl, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	providerCalls := 0
+	invocations := 0
+	var audits []model.RescueCandidateAudit
+	engine := Engine{Client: srv.Client(), Config: Config{
+		ChunkSize:             4,
+		Trials:                3,
+		MinConfidence:         .60,
+		Locations:             []string{model.LocationQuery},
+		ValueAware:            true,
+		ValueAwareBudget:      16,
+		EvidenceGuidedRescue:  true,
+		SemanticValuePriority: func(candidate model.Candidate) int {
+			if candidate.Name == "role" {
+				return 100
+			}
+			return 0
+		},
+		SemanticValueAdvisor: func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (SemanticValueAdvice, error) {
+			invocations++
+			if providerCalls >= 1 {
+				return SemanticValueAdvice{}, nil
+			}
+			providerCalls++
+			return SemanticValueAdvice{
+				Values:  []model.ProbeValue{model.StringValue("admin")},
+				Queried: true,
+			}, nil
+		},
+		RescueAuditObserver: func(audit model.RescueCandidateAudit) {
+			audits = append(audits, audit)
+		},
+	}}
+
+	results, err := engine.Scan(context.Background(), tmpl, profile, []string{"order", "role"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("results=%+v", results)
+	}
+	if providerCalls != 1 || invocations < 2 {
+		t.Fatalf("providerCalls=%d invocations=%d", providerCalls, invocations)
+	}
+	if len(audits) < 2 {
+		t.Fatalf("audits=%+v", audits)
+	}
+	if audits[0].Name != "role" || !audits[0].AIQueried || audits[0].AIValues != 1 {
+		t.Fatalf("role audit=%+v", audits[0])
+	}
+	if audits[1].Name != "order" || audits[1].AIQueried || audits[1].AIValues != 0 {
+		t.Fatalf("order audit=%+v", audits[1])
+	}
+}
