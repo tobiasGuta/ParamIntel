@@ -62,7 +62,7 @@ func main() {
 	flag.StringVar(&statePath, "state", "", "sanitized decision-state JSON file")
 	flag.StringVar(&model, "model", decision.DefaultTypeSafeModel, "TypeSafe model")
 	flag.IntVar(&runs, "runs", 10, "number of sequential Jev decisions to sample (1-50)")
-	flag.Float64Var(&minChoiceProbability, "min-choice-probability", decision.DefaultMinChoiceProbability, "minimum selected-action probability required to apply a non-STOP decision")
+	flag.Float64Var(&minChoiceProbability, "min-choice-probability", decision.DefaultMinChoiceProbability, "optional selected-action probability gate for non-STOP decisions; 0 disables numeric gating")
 	flag.DurationVar(&timeout, "timeout", 10*time.Second, "TypeSafe API timeout per run")
 	flag.Parse()
 
