@@ -1,1 +1,3 @@
-debug\nadmin\nformat\n
+debug
+admin
+format
