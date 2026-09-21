@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {"name":"holdout-language-enum","state":"labs/typesafe-decision-provider/holdout-language.json","expected_action":"enum_profile"},
+    {"name":"holdout-currency-enum","state":"labs/typesafe-decision-provider/holdout-currency.json","expected_action":"enum_profile"},
+    {"name":"holdout-nickname-nullability","state":"labs/typesafe-decision-provider/holdout-nickname.json","expected_action":"nullability_profile"},
+    {"name":"holdout-note-empty","state":"labs/typesafe-decision-provider/holdout-note.json","expected_action":"empty_value_profile"},
+    {"name":"holdout-environment-case","state":"labs/typesafe-decision-provider/holdout-environment.json","expected_action":"case_variation_profile"},
+    {"name":"holdout-region-related","state":"labs/typesafe-decision-provider/holdout-region.json","expected_action":"related_value_profile"},
+    {"name":"holdout-sandbox-boolean","state":"labs/typesafe-decision-provider/holdout-sandbox.json","expected_action":"boolean_profile"},
+    {"name":"holdout-retries-integer","state":"labs/typesafe-decision-provider/holdout-retries.json","expected_action":"integer_boundary_profile"},
+    {"name":"holdout-provider-related","state":"labs/typesafe-decision-provider/holdout-provider.json","expected_action":"related_value_profile"},
+    {"name":"holdout-cursor-stop","state":"labs/typesafe-decision-provider/holdout-cursor.json","expected_action":"stop"},
+    {"name":"holdout-etag-stop","state":"labs/typesafe-decision-provider/holdout-etag.json","expected_action":"stop"},
+    {"name":"holdout-checksum-stop","state":"labs/typesafe-decision-provider/holdout-checksum.json","expected_action":"stop"}
+  ]
+}
