@@ -49,6 +49,16 @@ type caseResult struct {
 	HybridUsesJev           bool            `json:"hybrid_uses_jev"`
 }
 
+type gatePolicyResult struct {
+	Name                    string  `json:"name"`
+	MinDecisionMargin       float64 `json:"min_decision_margin"`
+	JevExpectedDecisions    int     `json:"jev_expected_decisions"`
+	JevExpectedRate         float64 `json:"jev_expected_rate"`
+	HybridExpectedDecisions int     `json:"hybrid_expected_decisions"`
+	HybridExpectedRate      float64 `json:"hybrid_expected_rate"`
+	GatedNonStopDecisions   int     `json:"gated_non_stop_decisions"`
+}
+
 type report struct {
 	Cases                  int          `json:"cases"`
 	JevRunsPerCase         int          `json:"jev_runs_per_case"`
@@ -71,7 +81,8 @@ type report struct {
 	HybridAppliedExpectedRate    float64      `json:"hybrid_applied_expected_rate"`
 	HybridJevFallbackCalls       int          `json:"hybrid_jev_fallback_calls"`
 	HybridJevFallbackRate        float64      `json:"hybrid_jev_fallback_rate"`
-	CaseResults                  []caseResult `json:"case_results"`
+	ShadowGatePolicies           []gatePolicyResult `json:"shadow_gate_policies"`
+	CaseResults                  []caseResult      `json:"case_results"`
 }
 
 func main() {
@@ -126,6 +137,17 @@ func main() {
 	hybridAppliedExpected := 0
 	hybridTotal := 0
 	hybridJevCalls := 0
+
+	marginThresholds := []float64{0, 0.03, 0.05, 0.08, 0.10, 0.15, 0.20, 0.30}
+	type gateAccumulator struct {
+		jevExpected    int
+		hybridExpected int
+		gatedNonStop   int
+	}
+	gateAcc := make(map[float64]*gateAccumulator, len(marginThresholds))
+	for _, threshold := range marginThresholds {
+		gateAcc[threshold] = &gateAccumulator{}
+	}
 
 	for _, bc := range m.Cases {
 		stateRaw, err := os.ReadFile(filepath.Clean(bc.StatePath))
@@ -188,7 +210,27 @@ func main() {
 					runnerUp = probability
 				}
 			}
-			marginSum += plan.SelectedProbability - runnerUp
+			margin := plan.SelectedProbability - runnerUp
+			marginSum += margin
+
+			for _, threshold := range marginThresholds {
+				acc := gateAcc[threshold]
+				shadowAction := plan.SuggestedAction
+				if shadowAction != decision.ActionStop && margin < threshold {
+					shadowAction = decision.ActionStop
+					acc.gatedNonStop++
+				}
+				if shadowAction == bc.ExpectedAction {
+					acc.jevExpected++
+				}
+				if hDecision.Decided {
+					if hDecision.Action == bc.ExpectedAction {
+						acc.hybridExpected++
+					}
+				} else if shadowAction == bc.ExpectedAction {
+					acc.hybridExpected++
+				}
+			}
 		}
 
 		modalAction, modalCount := modal(counts)
@@ -252,6 +294,24 @@ func main() {
 	if heuristicDecided > 0 {
 		heuristicAccuracyWhenDecided = float64(heuristicCorrect) / float64(heuristicDecided)
 	}
+	shadowPolicies := make([]gatePolicyResult, 0, len(marginThresholds))
+	for _, threshold := range marginThresholds {
+		acc := gateAcc[threshold]
+		name := fmt.Sprintf("margin_%.2f", threshold)
+		if threshold == 0 {
+			name = "no_margin_gate"
+		}
+		shadowPolicies = append(shadowPolicies, gatePolicyResult{
+			Name:                    name,
+			MinDecisionMargin:       threshold,
+			JevExpectedDecisions:    acc.jevExpected,
+			JevExpectedRate:         float64(acc.jevExpected) / float64(jevTotal),
+			HybridExpectedDecisions: acc.hybridExpected,
+			HybridExpectedRate:      float64(acc.hybridExpected) / float64(hybridTotal),
+			GatedNonStopDecisions:   acc.gatedNonStop,
+		})
+	}
+
 	out := report{
 		Cases:                        len(m.Cases),
 		JevRunsPerCase:               runs,
@@ -274,6 +334,7 @@ func main() {
 		HybridAppliedExpectedRate:    float64(hybridAppliedExpected) / float64(hybridTotal),
 		HybridJevFallbackCalls:       hybridJevCalls,
 		HybridJevFallbackRate:        float64(hybridJevCalls) / float64(hybridTotal),
+		ShadowGatePolicies:           shadowPolicies,
 		CaseResults:                  results,
 	}
 	b, err := json.MarshalIndent(out, "", "  ")
