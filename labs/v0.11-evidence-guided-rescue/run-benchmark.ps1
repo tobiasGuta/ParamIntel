@@ -153,8 +153,6 @@ try {
     Write-Host "[PASS] Scenario D control: visibility is not proven without semantic-value AI"
 
     if ($WithGemini) {
-        Write-Host ""
-        Write-Host "[*] Scenario D - Gemini semantic value"
         if ([string]::IsNullOrWhiteSpace($env:GEMINI_API_KEY)) {
             Write-Warning "GEMINI_API_KEY is not set. Skipping Gemini scenario."
         } else {
@@ -168,7 +166,8 @@ try {
                     "-ai-value-advisor",
                     "-ai-provider", "gemini",
                     "-ai-value-budget", "4",
-                    "-ai-value-candidate-budget", "1"
+                    "-ai-value-candidate-budget", "1",
+                    "-verbose"
                 )
             }
             $dAI = Invoke-Scenario @dAIParams
@@ -177,6 +176,20 @@ try {
                 Write-Host "[PASS] Scenario D Gemini: visibility=internal independently verified"
             } else {
                 Write-Warning "Scenario D Gemini was inconclusive. The model suggestion is not treated as evidence."
+                if ($null -ne $dAI.ai_value_advisor) {
+                    Write-Host ("    provider/model: {0}/{1}" -f $dAI.ai_value_advisor.provider, $dAI.ai_value_advisor.model)
+                    Write-Host ("    candidate queries: {0}" -f $dAI.ai_value_advisor.candidate_queries)
+                    Write-Host ("    suggested/accepted values: {0}/{1}" -f $dAI.ai_value_advisor.suggested_values, $dAI.ai_value_advisor.accepted_values)
+                    Write-Host ("    verified parameters: {0}" -f $dAI.ai_value_advisor.verified_parameters)
+                }
+                if ($null -ne $dAI.value_aware) {
+                    Write-Host ("    rescue requests: {0}/{1}" -f $dAI.value_aware.requests_used, $dAI.value_aware.budget)
+                    foreach ($audit in $dAI.value_aware.candidate_audit) {
+                        if ($audit.ai_queried) {
+                            Write-Host ("    AI candidate audit: {0} tier={1} relevance={2} ai_values={3} requests={4} outcome={5}" -f $audit.name, $audit.evidence_tier, $audit.context_relevance, $audit.ai_values, $audit.requests_used, $audit.outcome)
+                        }
+                    }
+                }
             }
         }
     }
