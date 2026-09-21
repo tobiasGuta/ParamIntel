@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const DefaultMinConfidence = 0.80
+const DefaultMinChoiceProbability = 0.80
 
 type Plan struct {
 	SuggestedAction Action             `json:"suggested_action"`
@@ -21,7 +21,7 @@ type Plan struct {
 
 type Planner struct {
 	Provider      Provider
-	MinConfidence float64
+	MinChoiceProbability float64
 }
 
 func DefaultExperimentCatalog() []Option {
@@ -50,12 +50,12 @@ func (p Planner) PlanNext(ctx context.Context, state State) (Plan, error) {
 	if p.Provider == nil {
 		return Plan{}, fmt.Errorf("decision provider is required")
 	}
-	minConfidence := p.MinConfidence
-	if minConfidence == 0 {
-		minConfidence = DefaultMinConfidence
+	minChoiceProbability := p.MinChoiceProbability
+	if minChoiceProbability == 0 {
+		minChoiceProbability = DefaultMinChoiceProbability
 	}
-	if minConfidence < 0 || minConfidence > 1 {
-		return Plan{}, fmt.Errorf("minimum confidence must be between 0 and 1")
+	if minChoiceProbability < 0 || minChoiceProbability > 1 {
+		return Plan{}, fmt.Errorf("minimum choice probability must be between 0 and 1")
 	}
 	req := Request{
 		State:   state,
@@ -77,10 +77,16 @@ func (p Planner) PlanNext(ctx context.Context, state State) (Plan, error) {
 		Model:           result.Model,
 		Usage:           result.Usage,
 	}
-	if result.Action != ActionStop && result.Confidence < minConfidence {
-		plan.AppliedAction = ActionStop
-		plan.Gated = true
-		plan.GateReason = fmt.Sprintf("provider confidence %.3f below %.3f threshold", result.Confidence, minConfidence)
+	if result.Action != ActionStop {
+		selectedProbability, ok := result.Probabilities[result.Action]
+		if !ok {
+			return Plan{}, fmt.Errorf("provider response missing probability for selected action %q", result.Action)
+		}
+		if selectedProbability < minChoiceProbability {
+			plan.AppliedAction = ActionStop
+			plan.Gated = true
+			plan.GateReason = fmt.Sprintf("selected action probability %.3f below %.3f threshold", selectedProbability, minChoiceProbability)
+		}
 	}
 	return plan, nil
 }
