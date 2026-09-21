@@ -124,3 +124,52 @@ func TestDefaultAPIKeyEnv(t *testing.T) {
 		t.Fatal("expected unsupported provider error")
 	}
 }
+
+
+func TestGeminiProviderSemanticValueRequestAndResponse(t *testing.T) {
+	var seen map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		if err := json.Unmarshal(body, &seen); err != nil {
+			t.Fatal(err)
+		}
+		structured := `{"values":[{"value":"internal","kind":"string","reason":"visibility state","priority":95}]}`
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"status": "completed",
+			"steps": []any{map[string]any{
+				"type": "model_output",
+				"content": []any{map[string]any{"type": "text", "text": structured}},
+			}},
+		})
+	}))
+	defer srv.Close()
+
+	p, err := NewGeminiProvider(GeminiConfig{APIKey: "KEY", Model: "gemini-test", Endpoint: srv.URL, Client: srv.Client()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := p.SuggestValues(context.Background(), ValueInput{
+		Application: Input{
+			Method:            "GET",
+			Path:              "/api/projects",
+			ActiveLocations:   []string{"query"},
+			ResponseJSONShape: map[string]any{"visibility": "string"},
+		},
+		Candidate:      ValueCandidate{Name: "visibility", Location: "query"},
+		ExcludedValues: []ValueIdentity{{Kind: "string", Raw: "public"}},
+	}, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Value != "internal" || got[0].Kind != "string" {
+		t.Fatalf("got=%+v", got)
+	}
+	inputText, _ := seen["input"].(string)
+	if !strings.Contains(inputText, "visibility") || !strings.Contains(inputText, "excluded_values") {
+		t.Fatalf("semantic context missing: %s", inputText)
+	}
+	systemInstruction, _ := seen["system_instruction"].(string)
+	if !strings.Contains(systemInstruction, "never evidence") || !strings.Contains(systemInstruction, "Do not generate exploit payloads") {
+		t.Fatalf("value safety/evidence boundary missing: %s", systemInstruction)
+	}
+}

@@ -53,7 +53,10 @@ func (e Engine) semanticRescueCandidate(ctx context.Context, tmpl model.RequestT
 }
 
 func (e Engine) semanticRescueCandidateBudgeted(ctx context.Context, tmpl model.RequestTemplate, p model.BaselineProfile, candidate model.Candidate, trials int, minConfidence float64, budget *semanticBudget) (model.ParameterResult, model.ProbeValue, bool, error) {
-	values := semantics.ProfileValues(candidate.Name, candidate.Location)
+	return e.semanticRescueValuesBudgeted(ctx, tmpl, p, candidate, semantics.ProfileValues(candidate.Name, candidate.Location), trials, minConfidence, budget)
+}
+
+func (e Engine) semanticRescueValuesBudgeted(ctx context.Context, tmpl model.RequestTemplate, p model.BaselineProfile, candidate model.Candidate, values []model.ProbeValue, trials int, minConfidence float64, budget *semanticBudget) (model.ParameterResult, model.ProbeValue, bool, error) {
 	for _, value := range values {
 		if !budget.reserve(1) {
 			return model.ParameterResult{}, model.ProbeValue{}, false, nil

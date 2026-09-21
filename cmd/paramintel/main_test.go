@@ -64,19 +64,32 @@ func TestValidateDelay(t *testing.T) {
 }
 
 func TestValidateAIOptions(t *testing.T) {
-	if err := validateAIOptions(false, 0, 0); err != nil {
+	if err := validateAIOptions(false, false, 0, 0, 0, 0); err != nil {
 		t.Fatalf("disabled advisor should ignore AI-only values: %v", err)
 	}
-	if err := validateAIOptions(true, 12, 20*time.Second); err != nil {
+	if err := validateAIOptions(true, false, 12, 0, 0, 20*time.Second); err != nil {
 		t.Fatalf("valid AI options rejected: %v", err)
 	}
 	for _, budget := range []int{0, -1, 51} {
-		if err := validateAIOptions(true, budget, time.Second); err == nil {
+		if err := validateAIOptions(true, false, budget, 0, 0, time.Second); err == nil {
 			t.Fatalf("budget=%d should be rejected", budget)
 		}
 	}
-	if err := validateAIOptions(true, 1, 0); err == nil {
+	if err := validateAIOptions(true, false, 1, 0, 0, 0); err == nil {
 		t.Fatal("zero AI timeout should be rejected")
+	}
+	if err := validateAIOptions(false, true, 0, 4, 8, time.Second); err != nil {
+		t.Fatalf("valid semantic value advisor options rejected: %v", err)
+	}
+	for _, valueBudget := range []int{0, 13} {
+		if err := validateAIOptions(false, true, 0, valueBudget, 8, time.Second); err == nil {
+			t.Fatalf("value budget=%d should be rejected", valueBudget)
+		}
+	}
+	for _, candidateBudget := range []int{0, 51} {
+		if err := validateAIOptions(false, true, 0, 4, candidateBudget, time.Second); err == nil {
+			t.Fatalf("value candidate budget=%d should be rejected", candidateBudget)
+		}
 	}
 }
 

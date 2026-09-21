@@ -29,10 +29,10 @@ const (
 func main() {
 	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath, openAPIPath string
 	var aiProviderName, aiModel, aiAPIKeyEnv, aiContextResponsePath string
-	var baselineN, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget int
+	var baselineN, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget int
 	var timeout, delay, aiTimeout time.Duration
 	var minConf float64
-	var verbose, characterize, valueAware, allowStateChanging, showVersion, aiAdvisorEnabled, jsonScaffold bool
+	var verbose, characterize, valueAware, allowStateChanging, showVersion, aiAdvisorEnabled, aiValueAdvisorEnabled, jsonScaffold bool
 
 	flag.StringVar(&reqPath, "request", "", "raw HTTP request file (required)")
 	flag.StringVar(&wordPath, "wordlist", "", "optional parameter wordlist")
@@ -61,6 +61,9 @@ func main() {
 	flag.StringVar(&aiAPIKeyEnv, "ai-api-key-env", "", "environment variable containing the AI provider API key; provider default if empty")
 	flag.StringVar(&aiContextResponsePath, "ai-context-response", "", "optional raw HTTP response or JSON body override for sanitized AI context; a collected baseline response is used by default")
 	flag.IntVar(&aiCandidateBudget, "ai-candidate-budget", 12, "maximum AI-suggested candidates admitted to discovery")
+	flag.BoolVar(&aiValueAdvisorEnabled, "ai-value-advisor", false, "enable bounded AI semantic value suggestions after clean generic/deterministic misses")
+	flag.IntVar(&aiValueBudget, "ai-value-budget", 4, "maximum AI-suggested values admitted per candidate")
+	flag.IntVar(&aiValueCandidateBudget, "ai-value-candidate-budget", 8, "maximum candidates submitted to the AI Semantic Value Advisor")
 	flag.DurationVar(&aiTimeout, "ai-timeout", defaultAIProviderTimeout, "AI provider request timeout")
 
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
@@ -76,8 +79,11 @@ func main() {
 	if valueAwareBudget < 0 {
 		fatal(fmt.Errorf("-value-aware-budget must be 0 or greater"))
 	}
+	if aiValueAdvisorEnabled && (!valueAware || valueAwareBudget == 0) {
+		fatal(fmt.Errorf("-ai-value-advisor requires -value-aware=true and a positive -value-aware-budget"))
+	}
 	fatal(validateDelay(delay))
-	fatal(validateAIOptions(aiAdvisorEnabled, aiCandidateBudget, aiTimeout))
+	fatal(validateAIOptions(aiAdvisorEnabled, aiValueAdvisorEnabled, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget, aiTimeout))
 	fatal(validateJSONScaffoldOptions(jsonScaffold, contextResponsePath))
 
 	locations, err := parseLocations(locationSpec)
@@ -126,7 +132,7 @@ func main() {
 	ctx := context.Background()
 	var aiProvider aiadvisor.Provider
 	var aiOverrideRaw []byte
-	if aiAdvisorEnabled {
+	if aiAdvisorEnabled || aiValueAdvisorEnabled {
 		providerEnv := strings.TrimSpace(aiAPIKeyEnv)
 		if providerEnv == "" {
 			providerEnv, err = aiadvisor.DefaultAPIKeyEnv(aiProviderName)
@@ -193,10 +199,18 @@ func main() {
 	}
 
 	var aiSummary *model.AIAdvisorSummary
-	if aiAdvisorEnabled {
-		aiRaw, aiContextSource := selectAIContext(baselineSnapshot, aiOverrideRaw, aiContextResponsePath != "")
-		advisorInput, err := aiadvisor.BuildInput(tmpl, aiRaw, locations, jsonDepth)
+	var aiValueSummary *model.AIValueAdvisorSummary
+	var advisorInput aiadvisor.Input
+	var aiContextRaw []byte
+	var aiContextSource string
+	if aiAdvisorEnabled || aiValueAdvisorEnabled {
+		aiRaw, source := selectAIContext(baselineSnapshot, aiOverrideRaw, aiContextResponsePath != "")
+		aiContextRaw = aiRaw
+		aiContextSource = source
+		advisorInput, err = aiadvisor.BuildInput(tmpl, aiRaw, locations, jsonDepth)
 		fatal(err)
+	}
+	if aiAdvisorEnabled {
 		// Only the static built-ins are shared with the provider as exclusions.
 		// A user-supplied wordlist remains local, but all loaded deterministic
 		// names participate in the local admission gate so AI cannot claim
@@ -221,6 +235,61 @@ func main() {
 		}
 	}
 
+	var semanticValueAdvisor discovery.SemanticValueAdvisor
+	var semanticValuePriority discovery.SemanticValuePriority
+	if aiValueAdvisorEnabled {
+		aiValueSummary = &model.AIValueAdvisorSummary{
+			Provider:      aiProvider.Name(),
+			Model:         aiProvider.Model(),
+			InputPolicy:   "sanitized structure, candidate metadata, and bounded enum-like semantic hints",
+			ContextSource: aiContextSource,
+		}
+		remainingCandidates := aiValueCandidateBudget
+		semanticValueAdvisor = func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error) {
+			if remainingCandidates <= 0 {
+				return nil, nil
+			}
+			remainingCandidates--
+			excluded := make([]aiadvisor.ValueIdentity, 0, len(deterministic))
+			for _, value := range deterministic {
+				excluded = append(excluded, aiadvisor.ValueIdentity{Kind: value.Kind, Raw: value.Raw})
+			}
+			valueCandidate := aiadvisor.ValueCandidate{
+				Name:       candidate.Name,
+				Location:   candidate.Location,
+				JSONParent: candidate.JSONParent,
+			}
+			valueInput := aiadvisor.ValueInput{
+				Application:    advisorInput,
+				Candidate:      valueCandidate,
+				SemanticHints:  aiadvisor.BuildSemanticValueHints(aiContextRaw, valueCandidate, 12),
+				ExcludedValues: excluded,
+			}
+			result, err := aiadvisor.GenerateValues(ctx, aiProvider, valueInput, aiValueBudget)
+			if err != nil {
+				return nil, err
+			}
+			aiValueSummary.CandidateQueries++
+			aiValueSummary.SuggestedValues += result.SuggestedCount
+			aiValueSummary.AcceptedValues += result.AcceptedCount
+			if verbose {
+				fmt.Printf("[*] AI Semantic Value Advisor: %s (%s)\n", candidate.Name, candidate.Location)
+				fmt.Printf("    local relevance: %d\n", aiadvisor.ValueCandidateRelevance(advisorInput, valueCandidate))
+				fmt.Printf("    semantic hints: %d\n", len(valueInput.SemanticHints))
+				fmt.Printf("    suggested values: %d\n", result.SuggestedCount)
+				fmt.Printf("    accepted value hypotheses: %d\n", result.AcceptedCount)
+			}
+			return result.Values, nil
+		}
+		semanticValuePriority = func(candidate model.Candidate) int {
+			return aiadvisor.ValueCandidateRelevance(advisorInput, aiadvisor.ValueCandidate{
+				Name:       candidate.Name,
+				Location:   candidate.Location,
+				JSONParent: candidate.JSONParent,
+			})
+		}
+	}
+
 	engine := discovery.Engine{Client: client, Config: discovery.Config{
 		ChunkSize:        chunk,
 		Trials:           trials,
@@ -231,12 +300,21 @@ func main() {
 		MaxJSONDepth:     jsonDepth,
 		Characterize:     characterize,
 		ValueAware:       valueAware,
-		ValueAwareBudget: valueAwareBudget,
-		JSONScaffold:     jsonScaffold,
+		ValueAwareBudget:     valueAwareBudget,
+		SemanticValueAdvisor:  semanticValueAdvisor,
+		SemanticValuePriority: semanticValuePriority,
+		JSONScaffold:          jsonScaffold,
 	}}
 	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
 	fatal(err)
 	finalizeAIAdvisorSummary(aiSummary, params)
+	if aiValueSummary != nil {
+		for _, parameter := range params {
+			if parameter.DiscoveryMode == "ai_value_aware" {
+				aiValueSummary.VerifiedParameters++
+			}
+		}
+	}
 	if verbose && aiSummary != nil {
 		printAIAdvisorAudit(aiSummary)
 	}
@@ -245,8 +323,9 @@ func main() {
 		Target:     tmpl.URL,
 		Method:     tmpl.Method,
 		Baseline:   model.BaselineSummary{Samples: profile.Samples, StableJSONPaths: len(profile.StableJSONPaths), BodyLenMin: profile.BodyLenMin, BodyLenMax: profile.BodyLenMax},
-		AIAdvisor:  aiSummary,
-		Parameters: params,
+		AIAdvisor:      aiSummary,
+		AIValueAdvisor: aiValueSummary,
+		Parameters:     params,
 	}
 	b, err := json.MarshalIndent(report, "", "  ")
 	fatal(err)
@@ -266,15 +345,23 @@ func validateDelay(delay time.Duration) error {
 	return nil
 }
 
-func validateAIOptions(enabled bool, candidateBudget int, timeout time.Duration) error {
-	if !enabled {
+func validateAIOptions(candidateEnabled, valueEnabled bool, candidateBudget, valueBudget, valueCandidateBudget int, timeout time.Duration) error {
+	if !candidateEnabled && !valueEnabled {
 		return nil
 	}
-	if candidateBudget <= 0 || candidateBudget > 50 {
+	if candidateEnabled && (candidateBudget <= 0 || candidateBudget > 50) {
 		return fmt.Errorf("-ai-candidate-budget must be between 1 and 50 when -ai-advisor is enabled")
 	}
+	if valueEnabled {
+		if valueBudget <= 0 || valueBudget > 12 {
+			return fmt.Errorf("-ai-value-budget must be between 1 and 12 when -ai-value-advisor is enabled")
+		}
+		if valueCandidateBudget <= 0 || valueCandidateBudget > 50 {
+			return fmt.Errorf("-ai-value-candidate-budget must be between 1 and 50 when -ai-value-advisor is enabled")
+		}
+	}
 	if timeout <= 0 {
-		return fmt.Errorf("-ai-timeout must be greater than zero when -ai-advisor is enabled")
+		return fmt.Errorf("-ai-timeout must be greater than zero when an AI advisor is enabled")
 	}
 	return nil
 }

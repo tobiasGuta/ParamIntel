@@ -219,13 +219,25 @@ type AIAdvisorSummary struct {
 	CandidateAudit      []AIAdvisorCandidateAudit `json:"candidate_audit,omitempty"`
 }
 
+type AIValueAdvisorSummary struct {
+	Provider           string `json:"provider"`
+	Model              string `json:"model"`
+	InputPolicy        string `json:"input_policy"`
+	ContextSource      string `json:"context_source"`
+	CandidateQueries   int    `json:"candidate_queries"`
+	SuggestedValues    int    `json:"suggested_values"`
+	AcceptedValues     int    `json:"accepted_values"`
+	VerifiedParameters int    `json:"verified_parameters"`
+}
+
 type ScanReport struct {
-	Version    string            `json:"version"`
-	Target     string            `json:"target"`
-	Method     string            `json:"method"`
-	Baseline   BaselineSummary   `json:"baseline"`
-	AIAdvisor  *AIAdvisorSummary `json:"ai_advisor,omitempty"`
-	Parameters []ParameterResult `json:"parameters"`
+	Version        string                 `json:"version"`
+	Target         string                 `json:"target"`
+	Method         string                 `json:"method"`
+	Baseline       BaselineSummary        `json:"baseline"`
+	AIAdvisor      *AIAdvisorSummary      `json:"ai_advisor,omitempty"`
+	AIValueAdvisor *AIValueAdvisorSummary `json:"ai_value_advisor,omitempty"`
+	Parameters     []ParameterResult      `json:"parameters"`
 }
 
 type BaselineSummary struct {

@@ -11,18 +11,23 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/semantics"
 )
 
+type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error)
+type SemanticValuePriority func(candidate model.Candidate) int
+
 type Config struct {
-	ChunkSize        int
-	Trials           int
-	MinConfidence    float64
-	Verbose          bool
-	Logf             func(format string, args ...any)
-	Locations        []string
-	MaxJSONDepth     int
-	Characterize     bool
-	ValueAware       bool
-	ValueAwareBudget int
-	JSONScaffold     bool
+	ChunkSize            int
+	Trials               int
+	MinConfidence        float64
+	Verbose              bool
+	Logf                 func(format string, args ...any)
+	Locations            []string
+	MaxJSONDepth         int
+	Characterize         bool
+	ValueAware           bool
+	ValueAwareBudget     int
+	SemanticValueAdvisor SemanticValueAdvisor
+	SemanticValuePriority SemanticValuePriority
+	JSONScaffold         bool
 }
 
 type Engine struct {
@@ -143,7 +148,7 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			if _, ok := rescueExcluded[key]; ok {
 				continue
 			}
-			if len(semantics.ProfileValues(candidate.Name, candidate.Location)) == 0 {
+			if len(semantics.ProfileValues(candidate.Name, candidate.Location)) == 0 && cfg.SemanticValueAdvisor == nil {
 				continue
 			}
 			eligible++
@@ -154,7 +159,14 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 		e.verbosef("    eligible candidates: %d\n", eligible)
 		e.verbosef("    semantic probe budget: %d requests\n", cfg.ValueAwareBudget)
 
-		for _, candidate := range targets {
+		rescueTargets := append([]model.Candidate(nil), targets...)
+		if cfg.SemanticValueAdvisor != nil && cfg.SemanticValuePriority != nil {
+			sort.SliceStable(rescueTargets, func(i, j int) bool {
+				return cfg.SemanticValuePriority(rescueTargets[i]) > cfg.SemanticValuePriority(rescueTargets[j])
+			})
+		}
+
+		for _, candidate := range rescueTargets {
 			if budget.exhausted {
 				break
 			}
@@ -165,18 +177,33 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			if _, ok := rescueExcluded[key]; ok {
 				continue
 			}
-			if len(semantics.ProfileValues(candidate.Name, candidate.Location)) == 0 {
+			deterministicValues := semantics.ProfileValues(candidate.Name, candidate.Location)
+			if len(deterministicValues) == 0 && cfg.SemanticValueAdvisor == nil {
 				continue
 			}
 
-			r, value, ok, err := e.semanticRescueCandidateBudgeted(ctx, tmpl, profile, candidate, cfg.Trials, cfg.MinConfidence, budget)
+			r, value, ok, err := e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, deterministicValues, cfg.Trials, cfg.MinConfidence, budget)
 			if err != nil {
 				return nil, err
+			}
+			discoveryMode := "value_aware"
+			if !ok && cfg.SemanticValueAdvisor != nil && !budget.exhausted {
+				aiValues, err := cfg.SemanticValueAdvisor(ctx, candidate, deterministicValues)
+				if err != nil {
+					return nil, err
+				}
+				if len(aiValues) > 0 {
+					r, value, ok, err = e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, aiValues, cfg.Trials, cfg.MinConfidence, budget)
+					if err != nil {
+						return nil, err
+					}
+					discoveryMode = "ai_value_aware"
+				}
 			}
 			if !ok {
 				continue
 			}
-			r.DiscoveryMode = "value_aware"
+			r.DiscoveryMode = discoveryMode
 			r.DiscoveryValue = value.Raw
 			r.DiscoveryValueKind = value.Kind
 			if cfg.Characterize {
@@ -234,6 +261,8 @@ func (e Engine) logVerification(r model.ParameterResult, accepted bool, minConfi
 	switch r.DiscoveryMode {
 	case "value_aware":
 		e.verbosef("    discovery: value-aware using %q (%s)\n", r.DiscoveryValue, r.DiscoveryValueKind)
+	case "ai_value_aware":
+		e.verbosef("    discovery: AI semantic value using %q (%s)\n", r.DiscoveryValue, r.DiscoveryValueKind)
 	case "schema_typed":
 		e.verbosef("    discovery: schema-typed using %q (%s)\n", r.DiscoveryValue, r.DiscoveryValueKind)
 	}
