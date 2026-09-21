@@ -39,7 +39,7 @@ func TestAIValueAdvisorRescuesApplicationSpecificEnum(t *testing.T) {
 		Characterize:     false,
 		ValueAware:       true,
 		ValueAwareBudget: 8,
-		SemanticValueAdvisor: func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error) {
+		SemanticValueAdvisor: func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (SemanticValueAdvice, error) {
 			advisorCalls++
 			if candidate.Name != "visibility" {
 				t.Fatalf("candidate=%+v", candidate)
@@ -47,7 +47,7 @@ func TestAIValueAdvisorRescuesApplicationSpecificEnum(t *testing.T) {
 			if len(deterministic) != 0 {
 				t.Fatalf("visibility should have no built-in semantic profile: %+v", deterministic)
 			}
-			return []model.ProbeValue{model.StringValue("internal")}, nil
+			return SemanticValueAdvice{Values: []model.ProbeValue{model.StringValue("internal")}, Queried: true}, nil
 		},
 	}}
 
@@ -95,9 +95,9 @@ func TestAIValueAdvisorNotCalledWhenDeterministicValueSucceeds(t *testing.T) {
 		Locations:        []string{model.LocationQuery},
 		ValueAware:       true,
 		ValueAwareBudget: 8,
-		SemanticValueAdvisor: func(context.Context, model.Candidate, []model.ProbeValue) ([]model.ProbeValue, error) {
+		SemanticValueAdvisor: func(context.Context, model.Candidate, []model.ProbeValue) (SemanticValueAdvice, error) {
 			advisorCalls++
-			return []model.ProbeValue{model.StringValue("internal")}, nil
+			return SemanticValueAdvice{Values: []model.ProbeValue{model.StringValue("internal")}, Queried: true}, nil
 		},
 	}}
 	results, err := engine.Scan(context.Background(), tmpl, profile, []string{"debug"})
@@ -145,15 +145,15 @@ func TestAIValueAdvisorPrioritizesHighSignalCandidateBeforeBudgetIsSpent(t *test
 			}
 			return 0
 		},
-		SemanticValueAdvisor: func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error) {
+		SemanticValueAdvisor: func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (SemanticValueAdvice, error) {
 			called = append(called, candidate.Name)
 			if len(called) > 1 {
-				return nil, nil
+				return SemanticValueAdvice{}, nil
 			}
 			if candidate.Name != "visibility" {
 				t.Fatalf("first AI value query spent on %q, want visibility", candidate.Name)
 			}
-			return []model.ProbeValue{model.StringValue("internal")}, nil
+			return SemanticValueAdvice{Values: []model.ProbeValue{model.StringValue("internal")}, Queried: true}, nil
 		},
 	}}
 
