@@ -13,6 +13,7 @@ import (
 
 type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error)
 type SemanticValuePriority func(candidate model.Candidate) int
+type VerifiedParameterObserver func(result model.ParameterResult)
 
 type Config struct {
 	ChunkSize            int
@@ -27,6 +28,7 @@ type Config struct {
 	ValueAwareBudget     int
 	SemanticValueAdvisor SemanticValueAdvisor
 	SemanticValuePriority SemanticValuePriority
+	VerifiedParameterObserver VerifiedParameterObserver
 	JSONScaffold         bool
 }
 
@@ -128,6 +130,9 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			}
 			continue
 		}
+		if cfg.VerifiedParameterObserver != nil {
+			cfg.VerifiedParameterObserver(r)
+		}
 		if cfg.Characterize {
 			if err := e.characterize(ctx, tmpl, profile, candidate, &r); err != nil {
 				return nil, err
@@ -206,6 +211,9 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			r.DiscoveryMode = discoveryMode
 			r.DiscoveryValue = value.Raw
 			r.DiscoveryValueKind = value.Kind
+			if cfg.VerifiedParameterObserver != nil {
+				cfg.VerifiedParameterObserver(r)
+			}
 			if cfg.Characterize {
 				if err := e.characterize(ctx, tmpl, profile, candidate, &r); err != nil {
 					return nil, err
