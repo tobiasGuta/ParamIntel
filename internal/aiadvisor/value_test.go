@@ -80,3 +80,19 @@ func TestJSONValueValidationRejectsUnsafeKindsAndInvalidTypedValues(t *testing.T
 		}
 	}
 }
+
+
+func TestSemanticStringAllowlistRejectsPayloadSyntax(t *testing.T) {
+	input := ValueInput{Candidate: ValueCandidate{Name: "mode", Location: model.LocationQuery}}
+	values, audit := evaluateValueSuggestions(input, []ValueSuggestion{
+		{Value: "../admin", Kind: "string", Priority: 100},
+		{Value: "<script>", Kind: "string", Priority: 90},
+		{Value: "internal", Kind: "string", Priority: 80},
+	}, 4)
+	if len(values) != 1 || values[0] != model.StringValue("internal") {
+		t.Fatalf("values=%+v", values)
+	}
+	if audit[0].RejectionReason != "unsafe_string" || audit[1].RejectionReason != "unsafe_string" {
+		t.Fatalf("audit=%+v", audit)
+	}
+}
