@@ -248,3 +248,43 @@ The evaluator records:
 - min/mean/max latency.
 
 The goal is to distinguish **ranking stability** from **probability calibration**. If Jev repeatedly chooses the same correct action while the numeric probability fluctuates around a threshold, ParamIntel should not simply tune the threshold to the last observed run. The eventual gate should be selected from the benchmark distribution, not from one sample.
+
+
+## Multi-case calibration fixtures
+
+The spike now includes a small calibration set beyond the original enum case:
+
+```text
+state-enum.json       -> expert expectation: enum_profile
+state-boolean.json    -> expert expectation: boolean_profile
+state-integer.json    -> expert expectation: integer_boundary_profile
+state-sufficient.json -> expert expectation: stop
+state-ambiguous.json  -> expert expectation: stop or a strongly gated non-STOP result
+```
+
+Run each state repeatedly before changing the gate.
+
+Example:
+
+```powershell
+go run .\cmd\decision-stability `
+  -state .\labs\typesafe-decision-provider\state-boolean.json `
+  -runs 10 `
+  -min-choice-probability 0.80
+```
+
+The evaluator now also reports the runner-up action and the **decision margin**:
+
+```text
+decision margin = selected action probability - runner-up probability
+```
+
+This separates two very different situations:
+
+```text
+selected 0.77, runner-up 0.14 -> margin 0.63 -> strongly dominant choice
+
+selected 0.77, runner-up 0.72 -> margin 0.05 -> genuinely ambiguous choice
+```
+
+An eventual production gate may use a calibrated combination of selected probability and decision margin, but no margin threshold should be chosen until the multi-case data is collected.
