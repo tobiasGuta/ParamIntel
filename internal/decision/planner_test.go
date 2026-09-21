@@ -68,3 +68,25 @@ func TestPlannerStopsWithoutProviderWhenBudgetExhausted(t *testing.T) {
 		t.Fatalf("plan=%+v", plan)
 	}
 }
+
+
+func TestPlannerPreservesLowConfidenceProviderStopWithoutGate(t *testing.T) {
+	provider := &stubProvider{result: Result{
+		Action:     ActionStop,
+		Confidence: 0.49,
+		Provider:   "stub",
+		Model:      "stub-model",
+	}}
+	plan, err := (Planner{Provider: provider, MinConfidence: 0.80}).PlanNext(context.Background(), State{
+		RemainingRequestBudget: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.SuggestedAction != ActionStop || plan.AppliedAction != ActionStop {
+		t.Fatalf("plan=%+v", plan)
+	}
+	if plan.Gated || plan.GateReason != "" {
+		t.Fatalf("provider-selected STOP should not be labeled as gated: %+v", plan)
+	}
+}
