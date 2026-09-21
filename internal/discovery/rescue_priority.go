@@ -18,16 +18,22 @@ const (
 )
 
 type rescueRank struct {
-	Tier               rescueEvidenceTier
-	SourcePriority     int
-	ContextRelevance   int
-	Reason             string
+	Tier                rescueEvidenceTier
+	SourcePriority      int
+	ContextRelevance    int
+	EstimatedScreenCost int
+	Reason              string
 }
 
 func rankRescueCandidate(candidate model.Candidate, contextual SemanticValuePriority) rescueRank {
-	rank := rescueRank{Tier: rescueTierGeneric, Reason: "generic candidate"}
+	values := semantics.ProfileValues(candidate.Name, candidate.Location)
+	rank := rescueRank{
+		Tier:                rescueTierGeneric,
+		EstimatedScreenCost: len(values),
+		Reason:              "generic candidate",
+	}
 
-	if len(semantics.ProfileValues(candidate.Name, candidate.Location)) > 0 {
+	if len(values) > 0 {
 		rank.Tier = rescueTierHeuristic
 		rank.Reason = "local semantic profile"
 	}
@@ -80,6 +86,14 @@ func rescueRankLess(a, b rescueRank) bool {
 	}
 	if a.ContextRelevance != b.ContextRelevance {
 		return a.ContextRelevance > b.ContextRelevance
+	}
+	aKnownCost := a.EstimatedScreenCost > 0
+	bKnownCost := b.EstimatedScreenCost > 0
+	if aKnownCost != bKnownCost {
+		return aKnownCost
+	}
+	if aKnownCost && a.EstimatedScreenCost != b.EstimatedScreenCost {
+		return a.EstimatedScreenCost < b.EstimatedScreenCost
 	}
 	return false
 }
