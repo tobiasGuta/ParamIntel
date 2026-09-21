@@ -1,0 +1,26 @@
+{
+  "candidate": {
+    "name": "visibility",
+    "location": "query",
+    "discovery_mode": "ai_value_aware",
+    "value_kind": "string"
+  },
+  "verification": {
+    "candidate_changed": 3,
+    "candidate_trials": 3,
+    "control_changed": 0,
+    "control_trials": 3,
+    "confidence": 1.0
+  },
+  "evidence": {
+    "kinds": [
+      "json_path_added",
+      "json_value_changed"
+    ],
+    "paths": [
+      "$.internal_projects",
+      "$.mode"
+    ]
+  },
+  "remaining_request_budget": 18
+}
