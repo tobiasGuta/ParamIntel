@@ -533,3 +533,61 @@ numeric gate interventions:              0
 The only modal miss was `plan -> enum_profile`, where Jev chose STOP in 3/5 runs.
 
 This is sufficient to continue evaluating Jev as the residual semantic planner. It is not yet sufficient to wire the provider into ParamIntel's production scan path. The remaining graduation work is end-to-end HybridPlanner verification and sanitized real-flow evaluation.
+
+
+## Real-flow shadow capture
+
+The spike now supports passive capture of sanitized decision states from real verified ParamIntel parameters **before characterization**.
+
+The capture path is local-only and does not call TypeSafe, does not choose an action, and does not alter discovery or characterization behavior.
+
+Enable it with:
+
+```powershell
+go run .\cmd\paramintel `
+  -request .\request.txt `
+  -scheme https `
+  -decision-shadow-capture .\.paramintel\decision-shadow.jsonl `
+  -decision-shadow-budget 8 `
+  -verbose
+```
+
+Use the same normal ParamIntel flags you would otherwise use for the target. The two shadow flags only add passive capture.
+
+`-decision-shadow-budget` is explicit rather than silently invented. It represents the hypothetical remaining characterization-request budget that a future residual decision step would receive. It must be between 1 and 100 when capture is enabled.
+
+Each JSONL record contains only:
+
+- candidate name;
+- candidate location;
+- discovery mode;
+- probe value kind, never the probe value itself;
+- candidate/control trial counts;
+- deterministic confidence;
+- evidence kinds;
+- evidence paths;
+- configured remaining characterization budget.
+
+The capture deliberately excludes:
+
+- target URL / hostname;
+- raw HTTP request or response;
+- headers;
+- cookies;
+- authorization values;
+- request/response bodies;
+- discovery probe values;
+- evidence `before` / `after` values;
+- AI prompts or provider responses.
+
+Records are captured immediately after deterministic verification succeeds and before `characterize()` runs.
+
+The recommended path `.paramintel/decision-shadow.jsonl` is ignored by Git. The directory is created with private permissions where supported.
+
+Capture failures are non-authoritative: ParamIntel prints a warning and continues the scan so shadow instrumentation cannot change discovery results.
+
+### Real-flow evaluation target
+
+Collect approximately 20–30 useful records from authorized real ParamIntel runs. Duplicate records can be identified by the deterministic record `id`.
+
+Do not tune the deterministic heuristic or Jev action catalog against this dataset until the expert labels and baseline evaluation have been recorded.
