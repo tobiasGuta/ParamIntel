@@ -3,6 +3,7 @@ package aiadvisor
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -13,6 +14,21 @@ import (
 const (
 	ValueAdmissionAdmitted = "admitted"
 	ValueAdmissionRejected = "rejected"
+)
+
+var safeSemanticString = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 _.:+-]{0,79}package aiadvisor
+
+import (
+	"context"
+	"fmt"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/tobiasGuta/ParamIntel/internal/model"
+)
+
 )
 
 type ValueInput struct {
@@ -171,6 +187,9 @@ func normalizeSuggestedValue(location, kind, raw string) (model.ProbeValue, stri
 		if raw == "" {
 			return model.ProbeValue{}, "empty_value", false
 		}
+		if !safeSemanticString.MatchString(raw) {
+			return model.ProbeValue{}, "unsafe_string", false
+		}
 		return model.StringValue(raw), "", true
 	}
 
@@ -178,6 +197,9 @@ func normalizeSuggestedValue(location, kind, raw string) (model.ProbeValue, stri
 	case "string":
 		if raw == "" {
 			return model.ProbeValue{}, "empty_value", false
+		}
+		if !safeSemanticString.MatchString(raw) {
+			return model.ProbeValue{}, "unsafe_string", false
 		}
 		return model.StringValue(raw), "", true
 	case "boolean":
