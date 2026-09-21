@@ -27,6 +27,7 @@ type Config struct {
 	Characterize         bool
 	ValueAware           bool
 	ValueAwareBudget     int
+	EvidenceGuidedRescue bool
 	SemanticValueAdvisor  SemanticValueAdvisor
 	SemanticValuePriority SemanticValuePriority
 	RescuePlanObserver    RescuePlanObserver
@@ -167,12 +168,14 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 		e.verbosef("    semantic probe budget: %d requests\n", cfg.ValueAwareBudget)
 
 		rescueTargets := append([]model.Candidate(nil), targets...)
-		sort.SliceStable(rescueTargets, func(i, j int) bool {
-			left := rankRescueCandidate(rescueTargets[i], cfg.SemanticValuePriority)
-			right := rankRescueCandidate(rescueTargets[j], cfg.SemanticValuePriority)
-			return rescueRankLess(left, right)
-		})
-		if cfg.Verbose {
+		if cfg.EvidenceGuidedRescue {
+			sort.SliceStable(rescueTargets, func(i, j int) bool {
+				left := rankRescueCandidate(rescueTargets[i], cfg.SemanticValuePriority)
+				right := rankRescueCandidate(rescueTargets[j], cfg.SemanticValuePriority)
+				return rescueRankLess(left, right)
+			})
+		}
+		if cfg.Verbose && cfg.EvidenceGuidedRescue {
 			e.verbosef("[*] Evidence-guided rescue order\n")
 			position := 0
 			for _, candidate := range rescueTargets {
