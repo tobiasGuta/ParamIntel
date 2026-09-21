@@ -1,10 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
+
+	"github.com/tobiasGuta/ParamIntel/internal/httpraw"
 )
 
 func decodeLabJSON(t *testing.T, handler http.HandlerFunc, target string) map[string]any {
@@ -60,5 +64,33 @@ func TestProjectsGroundTruth(t *testing.T) {
 	changed := decodeLabJSON(t, handleProjects, "/projects?visibility=internal")
 	if changed["mode"] != "internal" {
 		t.Fatalf("changed=%v", changed)
+	}
+}
+
+
+func TestRequestFixturesAreValidRawHTTP(t *testing.T) {
+	fixtures := []string{
+		"request-items.txt",
+		"request-search.txt",
+		"request-no-signal.txt",
+		"request-projects.txt",
+	}
+	for _, name := range fixtures {
+		t.Run(name, func(t *testing.T) {
+			raw, err := os.ReadFile(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bytes.Contains(raw, []byte(`\n`)) {
+				t.Fatalf("%s contains literal \\n escapes instead of HTTP line breaks", name)
+			}
+			tmpl, err := httpraw.Parse(raw, "http")
+			if err != nil {
+				t.Fatalf("parse %s: %v", name, err)
+			}
+			if tmpl.Method != http.MethodGet {
+				t.Fatalf("%s method=%q want GET", name, tmpl.Method)
+			}
+		})
 	}
 }
