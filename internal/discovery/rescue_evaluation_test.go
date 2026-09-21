@@ -75,7 +75,7 @@ func runRescueEval(
 		switch audit.Outcome {
 		case "verified":
 			out.VerifiedCost += audit.RequestsUsed
-		case "miss", "budget_exhausted":
+		case "miss", "budget_exhausted", "verification_budget_insufficient":
 			out.MissRequests += audit.RequestsUsed
 		}
 	}
