@@ -11,8 +11,15 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/semantics"
 )
 
-type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error)
+type SemanticValueAdvice struct {
+	Values  []model.ProbeValue
+	Queried bool
+}
+
+type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (SemanticValueAdvice, error)
 type SemanticValuePriority func(candidate model.Candidate) int
+type RescuePlanObserver func(eligibleCandidates, budget int)
+type RescueAuditObserver func(model.RescueCandidateAudit)
 
 type Config struct {
 	ChunkSize            int
@@ -25,9 +32,12 @@ type Config struct {
 	Characterize         bool
 	ValueAware           bool
 	ValueAwareBudget     int
-	SemanticValueAdvisor SemanticValueAdvisor
+	EvidenceGuidedRescue bool
+	SemanticValueAdvisor  SemanticValueAdvisor
 	SemanticValuePriority SemanticValuePriority
-	JSONScaffold         bool
+	RescuePlanObserver    RescuePlanObserver
+	RescueAuditObserver   RescueAuditObserver
+	JSONScaffold          bool
 }
 
 type Engine struct {
@@ -154,16 +164,52 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			eligible++
 		}
 
+		if cfg.RescuePlanObserver != nil {
+			cfg.RescuePlanObserver(eligible, cfg.ValueAwareBudget)
+		}
 		budget := newSemanticBudget(cfg.ValueAwareBudget)
+		if cfg.EvidenceGuidedRescue {
+			budget.requireVerifiableAttempt(cfg.Trials)
+		}
 		e.verbosef("[*] Value-aware rescue\n")
 		e.verbosef("    eligible candidates: %d\n", eligible)
 		e.verbosef("    semantic probe budget: %d requests\n", cfg.ValueAwareBudget)
 
 		rescueTargets := append([]model.Candidate(nil), targets...)
-		if cfg.SemanticValueAdvisor != nil && cfg.SemanticValuePriority != nil {
+		if cfg.EvidenceGuidedRescue {
 			sort.SliceStable(rescueTargets, func(i, j int) bool {
-				return cfg.SemanticValuePriority(rescueTargets[i]) > cfg.SemanticValuePriority(rescueTargets[j])
+				left := rankRescueCandidate(rescueTargets[i], cfg.SemanticValuePriority)
+				right := rankRescueCandidate(rescueTargets[j], cfg.SemanticValuePriority)
+				return rescueRankLess(left, right)
 			})
+		}
+		if cfg.Verbose && cfg.EvidenceGuidedRescue {
+			e.verbosef("[*] Evidence-guided rescue order\n")
+			position := 0
+			for _, candidate := range rescueTargets {
+				key := candidateKey(candidate)
+				if _, ok := accepted[key]; ok {
+					continue
+				}
+				if _, ok := rescueExcluded[key]; ok {
+					continue
+				}
+				deterministicValues := semantics.ProfileValues(candidate.Name, candidate.Location)
+				if len(deterministicValues) == 0 && cfg.SemanticValueAdvisor == nil {
+					continue
+				}
+				position++
+				rank := rankRescueCandidate(candidate, cfg.SemanticValuePriority)
+				e.verbosef("    [%d] %s tier=%s source_priority=%d relevance=%d screen_cost=%d reason=%s\n",
+					position,
+					fmtCandidate(candidate),
+					rank.tierLabel(),
+					rank.SourcePriority,
+					rank.ContextRelevance,
+					rank.EstimatedScreenCost,
+					rank.auditReason(),
+				)
+			}
 		}
 
 		for _, candidate := range rescueTargets {
@@ -182,24 +228,73 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 				continue
 			}
 
+			rank := rankRescueCandidate(candidate, cfg.SemanticValuePriority)
+			budgetBefore := budget.remaining
+			usedBefore := budget.used
+			aiQueried := false
+			aiValueCount := 0
+
 			r, value, ok, err := e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, deterministicValues, cfg.Trials, cfg.MinConfidence, budget)
 			if err != nil {
 				return nil, err
 			}
 			discoveryMode := "value_aware"
 			if !ok && cfg.SemanticValueAdvisor != nil && !budget.exhausted {
-				aiValues, err := cfg.SemanticValueAdvisor(ctx, candidate, deterministicValues)
+				advice, err := cfg.SemanticValueAdvisor(ctx, candidate, deterministicValues)
 				if err != nil {
 					return nil, err
 				}
-				if len(aiValues) > 0 {
-					r, value, ok, err = e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, aiValues, cfg.Trials, cfg.MinConfidence, budget)
+				aiQueried = advice.Queried
+				aiValueCount = len(advice.Values)
+				if len(advice.Values) > 0 {
+					r, value, ok, err = e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, advice.Values, cfg.Trials, cfg.MinConfidence, budget)
 					if err != nil {
 						return nil, err
 					}
 					discoveryMode = "ai_value_aware"
 				}
 			}
+
+			outcome := "miss"
+			if ok {
+				outcome = "verified"
+			} else if budget.verificationFloorHit {
+				outcome = "verification_budget_insufficient"
+			} else if budget.exhausted {
+				outcome = "budget_exhausted"
+			}
+			audit := model.RescueCandidateAudit{
+				Name:                candidate.Name,
+				Location:            candidate.Location,
+				JSONPath:            candidate.JSONPath(),
+				EvidenceTier:        rank.tierLabel(),
+				SourcePriority:      rank.SourcePriority,
+				ContextRelevance:    rank.ContextRelevance,
+				Reason:              rank.auditReason(),
+				DeterministicValues: len(deterministicValues),
+				AIQueried:           aiQueried,
+				AIValues:            aiValueCount,
+				BudgetBefore:        budgetBefore,
+				BudgetAfter:         budget.remaining,
+				RequestsUsed:        budget.used - usedBefore,
+				Outcome:             outcome,
+			}
+			if ok {
+				audit.DiscoveryMode = discoveryMode
+			}
+			if cfg.RescueAuditObserver != nil {
+				cfg.RescueAuditObserver(audit)
+			}
+			e.verbosef("    rescue audit: %s tier=%s requests=%d budget=%d->%d outcome=%s ai_queried=%t\n",
+				fmtCandidate(candidate),
+				audit.EvidenceTier,
+				audit.RequestsUsed,
+				audit.BudgetBefore,
+				audit.BudgetAfter,
+				audit.Outcome,
+				audit.AIQueried,
+			)
+
 			if !ok {
 				continue
 			}
@@ -216,7 +311,9 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			accepted[key] = struct{}{}
 		}
 
-		if budget.exhausted {
+		if budget.verificationFloorHit {
+			e.verbosef("    semantic verification floor reached: %d/%d requests used; %d remain but cannot verify a new finding\n", budget.used, cfg.ValueAwareBudget, budget.remaining)
+		} else if budget.exhausted {
 			e.verbosef("    semantic probe budget exhausted: %d/%d requests used\n", budget.used, cfg.ValueAwareBudget)
 		} else {
 			e.verbosef("    semantic requests used: %d/%d\n", budget.used, cfg.ValueAwareBudget)

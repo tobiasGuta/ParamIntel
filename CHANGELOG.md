@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.11.0
+
+- Added evidence-guided semantic-rescue scheduling so bounded request budget is allocated by deterministic evidence tier, candidate-source priority, local contextual relevance, lower screening cost, then stable existing order.
+- Preserved the verifier and trust boundary: scheduler priority, OpenAPI metadata, context structure, and AI hypotheses still cannot produce a finding without live repeated candidate/control evidence.
+- Added deterministic local rescue relevance from the baseline response or explicit `-context-response`; this ranking path requires no provider call.
+- Added per-candidate rescue audit fields for evidence tier, source priority, contextual relevance, deterministic value count, actual AI query status, admitted AI values, budget before/after, requests used, outcome, and verified discovery mode.
+- Added top-level value-aware accounting for used requests, verified/miss/budget-exhausted cost, eligible candidates, attempted candidates, deferred candidates, and verified parameters.
+- Added the verification-feasibility floor: ParamIntel does not start a new semantic value when the remaining request budget cannot complete candidate screening, the paired random-name control, and configured repeated verification.
+- With three trials, the minimum actionable tail budget is eight requests; the frozen 17-candidate zero-signal case drops from 60 to 57 rescue requests without losing a still-verifiable finding.
+- Fixed AI semantic-value audit reporting so `ai_queried` reflects an actual provider query rather than merely invoking an advisor whose candidate-query budget is already exhausted.
+- Added body-less OpenAPI operation support: GET-style operations without request bodies can still contribute operation and response-schema intelligence, while response-only JSON properties remain informational unless the captured request has a JSON object body.
+- Added dedicated v0.11 acceptance coverage for context ranking, screening-cost tie-breaking, zero-signal behavior, Gemini semantic values, full CLI built-ins, fixture correctness, and request accounting.
+- Realistic OWASP crAPI acceptance confirmed the 57/64 verification floor on an authenticated endpoint, context-driven Gemini prioritization of `role` without a false finding, conservative body-less OpenAPI handling, and negative-control rejection of plausible OpenAPI coupon fields when generic unknown JSON keys reproduced the same behavior.
+- PortSwigger Web Security Academy mass-assignment acceptance confirmed positive recall: response-derived `$.chosen_discount` and one-level-scaffolded `$.chosen_discount.percentage` both verified at 3/3 candidate changes versus 0/3 random-name control changes.
+- Updated the CLI/report version and release-facing documentation to `ParamIntel v0.11.0`.
+
 ## v0.10.0
 
 - Added the optional AI Semantic Value Advisor for known candidate parameters whose behavior depends on application-specific values that generic probing and deterministic semantic profiles do not cover.

@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	version                  = "0.10.0"
+	version                  = "0.11.0"
 	defaultAIProviderTimeout = 2 * time.Minute
 )
 
@@ -174,6 +174,18 @@ func main() {
 		}
 	}
 
+	var semanticValuePriority discovery.SemanticValuePriority
+	if valueAware && valueAwareBudget > 0 {
+		var rankingSource string
+		semanticValuePriority, rankingSource, err = buildRescuePriority(tmpl, baselineSnapshot, contextRaw, locations, jsonDepth)
+		fatal(err)
+		if verbose {
+			fmt.Printf("[*] Evidence-guided rescue context\n")
+			fmt.Printf("    source: %s\n", rankingSource)
+			fmt.Printf("    provider calls: 0\n")
+		}
+	}
+
 	if openAPIDoc != nil {
 		openAPIReport, err := schemaintel.Analyze(openAPIDoc, tmpl, profile, schemaintel.DefaultConfig())
 		fatal(err)
@@ -189,7 +201,11 @@ func main() {
 			fmt.Printf("[*] OpenAPI candidate intelligence\n")
 			fmt.Printf("    version: %s\n", openAPIReport.OpenAPIVersion)
 			fmt.Printf("    operation: %s %s\n", openAPIReport.Operation.Method, openAPIReport.Operation.SpecPath)
-			fmt.Printf("    request media type: %s\n", openAPIReport.RequestMediaType)
+			if openAPIReport.RequestMediaType == "" {
+				fmt.Printf("    request media type: <none> (bodyless request)\n")
+			} else {
+				fmt.Printf("    request media type: %s\n", openAPIReport.RequestMediaType)
+			}
 			fmt.Printf("    response: %s %s\n", openAPIReport.ResponseStatusKey, openAPIReport.ResponseMediaType)
 			fmt.Printf("    response-only descriptors: %d\n", len(openAPIReport.Candidates))
 			fmt.Printf("    existing-parent candidates admitted: %d\n", len(openAPICandidates))
@@ -236,7 +252,6 @@ func main() {
 	}
 
 	var semanticValueAdvisor discovery.SemanticValueAdvisor
-	var semanticValuePriority discovery.SemanticValuePriority
 	if aiValueAdvisorEnabled {
 		aiValueSummary = &model.AIValueAdvisorSummary{
 			Provider:      aiProvider.Name(),
@@ -245,9 +260,9 @@ func main() {
 			ContextSource: aiContextSource,
 		}
 		remainingCandidates := aiValueCandidateBudget
-		semanticValueAdvisor = func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error) {
+		semanticValueAdvisor = func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (discovery.SemanticValueAdvice, error) {
 			if remainingCandidates <= 0 {
-				return nil, nil
+				return discovery.SemanticValueAdvice{}, nil
 			}
 			remainingCandidates--
 			excluded := make([]aiadvisor.ValueIdentity, 0, len(deterministic))
@@ -267,7 +282,7 @@ func main() {
 			}
 			result, err := aiadvisor.GenerateValues(ctx, aiProvider, valueInput, aiValueBudget)
 			if err != nil {
-				return nil, err
+				return discovery.SemanticValueAdvice{}, err
 			}
 			aiValueSummary.CandidateQueries++
 			aiValueSummary.SuggestedValues += result.SuggestedCount
@@ -278,15 +293,28 @@ func main() {
 				fmt.Printf("    semantic hints: %d\n", len(valueInput.SemanticHints))
 				fmt.Printf("    suggested values: %d\n", result.SuggestedCount)
 				fmt.Printf("    accepted value hypotheses: %d\n", result.AcceptedCount)
+				for _, item := range result.Audit {
+					fmt.Printf("    value hypothesis: %q kind=%s priority=%d admission=%s", item.Value, item.Kind, item.Priority, item.Admission)
+					if item.RejectionReason != "" {
+						fmt.Printf(" rejection=%s", item.RejectionReason)
+					}
+					fmt.Printf("\n")
+				}
 			}
-			return result.Values, nil
+			return discovery.SemanticValueAdvice{Values: result.Values, Queried: true}, nil
 		}
-		semanticValuePriority = func(candidate model.Candidate) int {
-			return aiadvisor.ValueCandidateRelevance(advisorInput, aiadvisor.ValueCandidate{
-				Name:       candidate.Name,
-				Location:   candidate.Location,
-				JSONParent: candidate.JSONParent,
-			})
+	}
+
+	var rescueAudits []model.RescueCandidateAudit
+	rescueEligible := 0
+	rescuePlanObserver := discovery.RescuePlanObserver(nil)
+	rescueAuditObserver := discovery.RescueAuditObserver(nil)
+	if valueAware && valueAwareBudget > 0 {
+		rescuePlanObserver = func(eligibleCandidates, budget int) {
+			rescueEligible = eligibleCandidates
+		}
+		rescueAuditObserver = func(audit model.RescueCandidateAudit) {
+			rescueAudits = append(rescueAudits, audit)
 		}
 	}
 
@@ -299,10 +327,13 @@ func main() {
 		Locations:        locations,
 		MaxJSONDepth:     jsonDepth,
 		Characterize:     characterize,
-		ValueAware:       valueAware,
+		ValueAware:           valueAware,
 		ValueAwareBudget:     valueAwareBudget,
+		EvidenceGuidedRescue: true,
 		SemanticValueAdvisor:  semanticValueAdvisor,
 		SemanticValuePriority: semanticValuePriority,
+		RescuePlanObserver:    rescuePlanObserver,
+		RescueAuditObserver:   rescueAuditObserver,
 		JSONScaffold:          jsonScaffold,
 	}}
 	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
@@ -318,13 +349,40 @@ func main() {
 	if verbose && aiSummary != nil {
 		printAIAdvisorAudit(aiSummary)
 	}
+	var valueAwareSummary *model.ValueAwareSummary
+	if valueAware && valueAwareBudget > 0 {
+		valueAwareSummary = &model.ValueAwareSummary{
+			Budget:              valueAwareBudget,
+			EligibleCandidates:  rescueEligible,
+			CandidatesAttempted: len(rescueAudits),
+			CandidateAudit:      rescueAudits,
+		}
+		valueAwareSummary.CandidatesDeferred = rescueEligible - len(rescueAudits)
+		if valueAwareSummary.CandidatesDeferred < 0 {
+			valueAwareSummary.CandidatesDeferred = 0
+		}
+		for _, audit := range rescueAudits {
+			valueAwareSummary.RequestsUsed += audit.RequestsUsed
+			switch audit.Outcome {
+			case "verified":
+				valueAwareSummary.VerifiedParameters++
+				valueAwareSummary.VerifiedRequests += audit.RequestsUsed
+			case "miss", "verification_budget_insufficient":
+				valueAwareSummary.MissRequests += audit.RequestsUsed
+			case "budget_exhausted":
+				valueAwareSummary.BudgetExhaustedRequests += audit.RequestsUsed
+			}
+		}
+	}
+
 	report := model.ScanReport{
-		Version:    version,
-		Target:     tmpl.URL,
-		Method:     tmpl.Method,
-		Baseline:   model.BaselineSummary{Samples: profile.Samples, StableJSONPaths: len(profile.StableJSONPaths), BodyLenMin: profile.BodyLenMin, BodyLenMax: profile.BodyLenMax},
+		Version:        version,
+		Target:         tmpl.URL,
+		Method:         tmpl.Method,
+		Baseline:       model.BaselineSummary{Samples: profile.Samples, StableJSONPaths: len(profile.StableJSONPaths), BodyLenMin: profile.BodyLenMin, BodyLenMax: profile.BodyLenMax},
 		AIAdvisor:      aiSummary,
 		AIValueAdvisor: aiValueSummary,
+		ValueAware:     valueAwareSummary,
 		Parameters:     params,
 	}
 	b, err := json.MarshalIndent(report, "", "  ")

@@ -1,0 +1,45 @@
+{
+  "lab": "v0.11-evidence-guided-rescue",
+  "address": "127.0.0.1:41782",
+  "scenarios": [
+    {
+      "id": "context-ranking",
+      "request": "request-items.txt",
+      "wordlist": "wordlist-items.txt",
+      "budget": 8,
+      "parameter": "format",
+      "value": "json",
+      "expected_verified_parameters": 1,
+      "expected_rescue_requests": 8
+    },
+    {
+      "id": "cost-tie-breaker",
+      "request": "request-search.txt",
+      "wordlist": "wordlist-search.txt",
+      "budget": 8,
+      "parameter": "order",
+      "value": "asc",
+      "expected_verified_parameters": 1,
+      "expected_rescue_requests": 8
+    },
+    {
+      "id": "zero-signal",
+      "request": "request-no-signal.txt",
+      "wordlist": "wordlist-no-signal.txt",
+      "budget": 64,
+      "expected_verified_parameters": 0,
+      "expected_rescue_requests": 57,
+      "expected_miss_requests": 57
+    },
+    {
+      "id": "gemini-semantic-value",
+      "request": "request-projects.txt",
+      "wordlist": "wordlist-projects.txt",
+      "budget": 32,
+      "parameter": "visibility",
+      "value": "internal",
+      "control_expected_verified_parameters": 0,
+      "ai_expected_discovery_mode": "ai_value_aware"
+    }
+  ]
+}

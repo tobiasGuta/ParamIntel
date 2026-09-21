@@ -1,4 +1,4 @@
-# ParamIntel v0.10.0
+# ParamIntel v0.11.0
 
 ParamIntel is an evidence-oriented HTTP parameter discovery and behavioral-analysis tool for authorized web security testing and bug bounty research.
 
@@ -25,12 +25,32 @@ ParamIntel has evolved in deliberate layers:
 - **v0.9.2 — OpenAPI nullability consistency:** preserve nullable schema provenance and withhold schema-typed shortcuts from nullable scalar declarations;
 - **v0.9.3 — supported Go runtime baseline:** move the supported minimum to Go 1.26 and validate the full release gate on Go 1.26.x and Go 1.27.x;
 - **v0.10 — AI Semantic Value Advisor:** optionally propose bounded application-specific values for known candidates after deterministic value-aware discovery cleanly misses, while preserving the same candidate/control verification and confidence model.
+- **v0.11 — evidence-guided adaptive rescue:** rank bounded semantic-rescue work by deterministic application evidence, contextual relevance, and screening cost; expose per-candidate request accounting; and stop starting new semantic values when the remaining budget cannot complete paired-control verification.
 
 The current governing rule is:
 
 > **OpenAPI and AI may tell ParamIntel what is worth testing, where it may belong, or which bounded value hypothesis is worth trying. Only live application behavior, repeated trials, paired random-name controls, and existing confidence/evidence rules may produce a finding.**
 
 Schema metadata and AI output are hypothesis input, not evidence.
+
+## What v0.11 adds
+
+v0.11 changes **where ParamIntel spends a bounded semantic-rescue request budget**, not what counts as evidence.
+
+- Application-backed evidence outranks weaker AI/local/generic hypotheses during value-aware rescue.
+- Ranking is deterministic and lexicographic: evidence tier, source priority, contextual relevance, lower screening cost, then stable existing order.
+- Baseline or explicit context-response structure can raise local relevance without an AI provider call.
+- Rescue reports now record per-candidate tier, relevance, request cost, AI-query status, budget before/after, and outcome.
+- A verification-feasibility guard stops starting a new semantic value when the remaining budget cannot complete candidate screening, paired control, and repeated verification.
+- With the default three trials, the minimum actionable tail budget is eight requests.
+- Body-less OpenAPI operations can now contribute operation and response-schema intelligence without inventing a JSON request body or writable candidates.
+- AI semantic-value audit output now distinguishes actual provider calls from advisor availability.
+
+The finding boundary is unchanged:
+
+> **Scheduling can decide what gets tested first. It cannot turn schema metadata, AI output, or contextual relevance into a finding.**
+
+Controlled evaluation showed better recall under tight budgets and a small zero-signal tail saving without weakening verification. Realistic acceptance against OWASP crAPI and PortSwigger Web Security Academy also exercised false-positive rejection, body-less OpenAPI handling, AI value prioritization, and a positive mass-assignment discovery.
 
 ## What v0.9 adds
 
@@ -439,7 +459,7 @@ Confirm version:
 Expected:
 
 ```text
-ParamIntel v0.10.0
+ParamIntel v0.11.0
 ```
 
 ## Basic query discovery
