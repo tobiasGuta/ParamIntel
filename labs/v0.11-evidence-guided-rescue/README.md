@@ -132,19 +132,22 @@ Expected acceptance:
 Ground truth:
 
 ```text
-parameter: sort
+parameter: order
 value:     asc
 budget:    8
 ```
 
-Both `debug` and `sort` are local semantic-profile candidates.
+The real CLI always includes ParamIntel's built-in candidate set. Among the local semantic profiles, `order` and `sort` are the cheapest at two values each, while candidates such as `debug` require four.
 
 Current deterministic screening cost:
 
 ```text
-debug -> 4 values
+order -> 2 values
 sort  -> 2 values
+debug -> 4 values
 ```
+
+Because the loader is stable and alphabetically ordered, `order` is the deterministic winner of the two-value tie.
 
 Run:
 
@@ -165,8 +168,9 @@ Run:
 
 Expected acceptance:
 
-- `sort` runs before `debug` despite appearing later in the wordlist;
-- `sort=asc` verifies;
+- a two-value candidate runs before four-value candidates such as `debug`;
+- the stable equal-cost tie chooses `order` before `sort`;
+- `order=asc` verifies;
 - request cost is 8;
 - no AI call is required.
 
@@ -309,7 +313,7 @@ The dedicated lab passes when:
 | Scenario | Expected |
 | --- | --- |
 | A — context ranking | `format=json` verified in 8 rescue requests |
-| B — cost tie-break | `sort=asc` verified in 8 rescue requests |
+| B — cost tie-break | `order=asc` verified in 8 rescue requests |
 | C — zero signal | 0 findings, 57 miss requests |
 | D — no-AI control | no `visibility` finding |
 | D — Gemini | `visibility=internal` independently verified |
