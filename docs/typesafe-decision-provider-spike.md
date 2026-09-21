@@ -288,3 +288,53 @@ selected 0.77, runner-up 0.72 -> margin 0.05 -> genuinely ambiguous choice
 ```
 
 An eventual production gate may use a calibrated combination of selected probability and decision margin, but no margin threshold should be chosen until the multi-case data is collected.
+
+
+## Jev versus deterministic baseline
+
+The spike now includes a deliberately competent deterministic router in `internal/decision/heuristic.go`.
+
+It handles:
+
+- exhausted request budgets;
+- already-verified high-confidence findings;
+- noisy paired controls;
+- explicit boolean/integer value kinds;
+- common enum-like candidate names plus enum-like response structure;
+- common boolean/numeric naming patterns.
+
+This is not intended as a straw-man baseline. If it matches Jev on the harder cases, Jev does not earn a production dependency.
+
+Run the head-to-head benchmark:
+
+```powershell
+go run .\cmd\decision-benchmark `
+  -manifest .\labs\typesafe-decision-provider\benchmark.json `
+  -runs 5
+```
+
+The benchmark contains the original five calibration states plus eight harder states where the semantic clue is more indirect.
+
+It reports:
+
+- heuristic action and correctness per case;
+- Jev modal action and modal rate;
+- Jev expert-label agreement rate;
+- mean selected probability;
+- mean selected-vs-runner-up margin;
+- mean Jev latency;
+- aggregate heuristic accuracy;
+- aggregate Jev expert-label agreement.
+
+The production decision should be simple:
+
+```text
+if deterministic baseline ~= Jev:
+    do not add Jev to ParamIntel
+
+if Jev materially beats deterministic baseline
+and remains stable/cost-effective:
+    continue toward Feedback-Guided Characterization Planner
+```
+
+The benchmark should be expanded before any production merge, but it is now sufficient to test whether Jev is providing reasoning value beyond obvious local rules.
