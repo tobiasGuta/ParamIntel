@@ -174,6 +174,30 @@ func main() {
 		}
 	}
 
+	var semanticValuePriority discovery.SemanticValuePriority
+	if valueAware && valueAwareBudget > 0 {
+		rankingRaw := baselineSnapshot.Body
+		rankingSource := "baseline_response"
+		if len(contextRaw) > 0 {
+			rankingRaw = contextRaw
+			rankingSource = "context_response"
+		}
+		rankingInput, err := aiadvisor.BuildInput(tmpl, rankingRaw, locations, jsonDepth)
+		fatal(err)
+		semanticValuePriority = func(candidate model.Candidate) int {
+			return aiadvisor.ValueCandidateRelevance(rankingInput, aiadvisor.ValueCandidate{
+				Name:       candidate.Name,
+				Location:   candidate.Location,
+				JSONParent: candidate.JSONParent,
+			})
+		}
+		if verbose {
+			fmt.Printf("[*] Evidence-guided rescue context\n")
+			fmt.Printf("    source: %s\n", rankingSource)
+			fmt.Printf("    provider calls: 0\n")
+		}
+	}
+
 	if openAPIDoc != nil {
 		openAPIReport, err := schemaintel.Analyze(openAPIDoc, tmpl, profile, schemaintel.DefaultConfig())
 		fatal(err)
@@ -236,7 +260,6 @@ func main() {
 	}
 
 	var semanticValueAdvisor discovery.SemanticValueAdvisor
-	var semanticValuePriority discovery.SemanticValuePriority
 	if aiValueAdvisorEnabled {
 		aiValueSummary = &model.AIValueAdvisorSummary{
 			Provider:      aiProvider.Name(),
@@ -280,13 +303,6 @@ func main() {
 				fmt.Printf("    accepted value hypotheses: %d\n", result.AcceptedCount)
 			}
 			return result.Values, nil
-		}
-		semanticValuePriority = func(candidate model.Candidate) int {
-			return aiadvisor.ValueCandidateRelevance(advisorInput, aiadvisor.ValueCandidate{
-				Name:       candidate.Name,
-				Location:   candidate.Location,
-				JSONParent: candidate.JSONParent,
-			})
 		}
 	}
 
