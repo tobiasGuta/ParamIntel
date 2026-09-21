@@ -535,59 +535,139 @@ The only modal miss was `plan -> enum_profile`, where Jev chose STOP in 3/5 runs
 This is sufficient to continue evaluating Jev as the residual semantic planner. It is not yet sufficient to wire the provider into ParamIntel's production scan path. The remaining graduation work is end-to-end HybridPlanner verification and sanitized real-flow evaluation.
 
 
-## Real-flow shadow capture
+## Real-flow residual shadow capture
 
-The spike now supports passive capture of sanitized decision states from real verified ParamIntel parameters **before characterization**.
+Schema v2 captures sanitized **decision-needed residual states immediately before semantic/value-aware rescue**.
 
-The capture path is local-only and does not call TypeSafe, does not choose an action, and does not alter discovery or characterization behavior.
+This corrects the original schema-v1 experiment. Schema v1 captured already-verified findings before characterization. Those states usually had candidate 3/3, control 0/3, and high confidence, causing the deterministic heuristic to STOP before Jev could ever be consulted. They therefore cannot measure Jev's residual routing value and must not be mixed with schema-v2 data.
 
-Enable it with:
+The v2 capture point matches the benchmark lifecycle:
+
+```text
+normal deterministic discovery
+        |
+        +-- verified finding -----------------> normal finding path; no shadow case
+        |
+        +-- noisy/ambiguous generic result ---> residual shadow state; deterministic STOP is measurable
+        |
+        +-- clean miss ------------------------> residual shadow state
+                                                   |
+                                                   +-- current value-aware rescue continues unchanged
+```
+
+The capture path is passive. It does not call TypeSafe, choose an action, alter candidate ordering, alter request execution, or change finding confidence.
+
+Enable it with normal value-aware scanning:
 
 ```powershell
 go run .\cmd\paramintel `
   -request .\request.txt `
   -scheme https `
+  -value-aware `
   -decision-shadow-capture .\.paramintel\decision-shadow.jsonl `
   -decision-shadow-budget 8 `
   -verbose
 ```
 
-Use the same normal ParamIntel flags you would otherwise use for the target. The two shadow flags only add passive capture.
+`-decision-shadow-budget` is an evaluation cap. The stored remaining budget is the lower of:
 
-`-decision-shadow-budget` is explicit rather than silently invented. It represents the hypothetical remaining characterization-request budget that a future residual decision step would receive. It must be between 1 and 100 when capture is enabled.
+- the real remaining semantic request budget at that decision point; and
+- the configured shadow budget.
 
-Each JSONL record contains only:
+This prevents the shadow dataset from pretending more request authority than either the live scan or the future bounded planner should have.
+
+Each schema-v2 JSONL record contains only:
 
 - candidate name;
 - candidate location;
-- discovery mode;
-- probe value kind, never the probe value itself;
-- candidate/control trial counts;
+- discovery mode/value kind when already known;
+- candidate/control trial counts when a direct generic verification exists;
 - deterministic confidence;
 - evidence kinds;
-- evidence paths;
-- configured remaining characterization budget.
+- sanitized evidence paths;
+- candidate-source type/path when available;
+- bounded remaining request budget.
 
 The capture deliberately excludes:
 
 - target URL / hostname;
-- raw HTTP request or response;
+- raw HTTP requests or responses;
 - headers;
 - cookies;
 - authorization values;
 - request/response bodies;
 - discovery probe values;
 - evidence `before` / `after` values;
+- candidate-source free-text reasons;
+- schema references;
 - AI prompts or provider responses.
 
-Records are captured immediately after deterministic verification succeeds and before `characterize()` runs.
+The recommended path `.paramintel/decision-shadow.jsonl` is ignored by Git. Capture write failures print a warning and do not change scan behavior.
 
-The recommended path `.paramintel/decision-shadow.jsonl` is ignored by Git. The directory is created with private permissions where supported.
+### Dataset freezing and independent labeling
 
-Capture failures are non-authoritative: ParamIntel prints a warning and continues the scan so shadow instrumentation cannot change discovery results.
+Freeze and deduplicate captured states without calling Jev:
+
+```powershell
+go run .\cmd\decision-shadow-freeze `
+  -input .\.paramintel\decision-shadow.jsonl `
+  -output .\.paramintel\decision-shadow-dataset.json
+```
+
+The freezer:
+
+- accepts only the current shadow schema;
+- recomputes every deterministic state ID and rejects tampering;
+- deduplicates identical states by ID;
+- sorts cases deterministically;
+- leaves every `expected_action` blank.
+
+Fill the labels **before** any Jev replay. Labels must use exactly one action from the fixed catalog:
+
+```text
+stop
+enum_profile
+boolean_profile
+nullability_profile
+integer_boundary_profile
+empty_value_profile
+case_variation_profile
+related_value_profile
+```
+
+Validate labels without an API key or provider call:
+
+```powershell
+go run .\cmd\decision-shadow-replay `
+  -dataset .\.paramintel\decision-shadow-dataset.json `
+  -validate-only
+```
+
+The validator refuses blank labels, unknown actions, duplicate IDs, changed state IDs, or mismatched dataset counts.
+
+Only after labels are frozen should Jev be evaluated:
+
+```powershell
+go run .\cmd\decision-shadow-replay `
+  -dataset .\.paramintel\decision-shadow-dataset.json `
+  -runs 5 `
+  -output .\.paramintel\decision-shadow-replay.json
+```
+
+Replay uses the actual `HybridPlanner` and reports:
+
+- per-run expected-action agreement;
+- modal case accuracy;
+- deterministic decision count;
+- provider decision count;
+- fail-closed decision count;
+- mean latency;
+- TypeSafe input/output usage.
 
 ### Real-flow evaluation target
 
-Collect approximately 20–30 useful records from authorized real ParamIntel runs. Duplicate records can be identified by the deterministic record `id`.
+Do not force a fixed positive-finding quota from one live target.
 
-Do not tune the deterministic heuristic or Jev action catalog against this dataset until the expert labels and baseline evaluation have been recorded.
+The useful population is residual decision states, including clean misses and deterministic STOP cases, not only verified findings. Collect them opportunistically from normal authorized ParamIntel use, deduplicate them, freeze the dataset, and label it before provider replay.
+
+Do not tune the deterministic heuristic or Jev action catalog against a frozen evaluation dataset. If a frozen set is used to change routing logic, demote it to development evidence and create a fresh holdout.
