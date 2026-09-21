@@ -43,18 +43,18 @@ func TestHybridPlannerUsesDeterministicDecisionFirst(t *testing.T) {
 
 func TestHybridPlannerUsesJevAfterDeterministicAbstainWithoutNumericGate(t *testing.T) {
 	provider := &hybridStubProvider{result: Result{
-		Action:     ActionEnumProfile,
+		Action:     ActionRelatedValueProfile,
 		Confidence: 0.35,
 		Provider:   "stub",
 		Model:      "stub-model",
 		Probabilities: map[Action]float64{
-			ActionEnumProfile: 0.41,
-			ActionStop:        0.33,
+			ActionRelatedValueProfile: 0.41,
+			ActionStop:                0.33,
 		},
 	}}
 	state := State{
-		Candidate:              CandidateState{Name: "delivery", ValueKind: "string"},
-		Evidence:               EvidenceState{Paths: []string{"$.supported_delivery_methods"}},
+		Candidate:              CandidateState{Name: "region", ValueKind: "string"},
+		Evidence:               EvidenceState{Paths: []string{"$.aliases.region"}},
 		RemainingRequestBudget: 10,
 	}
 
@@ -65,7 +65,7 @@ func TestHybridPlannerUsesJevAfterDeterministicAbstainWithoutNumericGate(t *test
 	if provider.calls != 1 {
 		t.Fatalf("provider calls=%d want=1", provider.calls)
 	}
-	if plan.SuggestedAction != ActionEnumProfile || plan.AppliedAction != ActionEnumProfile {
+	if plan.SuggestedAction != ActionRelatedValueProfile || plan.AppliedAction != ActionRelatedValueProfile {
 		t.Fatalf("plan=%+v", plan)
 	}
 	if plan.Gated {
