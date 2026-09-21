@@ -176,21 +176,9 @@ func main() {
 
 	var semanticValuePriority discovery.SemanticValuePriority
 	if valueAware && valueAwareBudget > 0 {
-		rankingRaw := baselineSnapshot.Body
-		rankingSource := "baseline_response"
-		if len(contextRaw) > 0 {
-			rankingRaw = contextRaw
-			rankingSource = "context_response"
-		}
-		rankingInput, err := aiadvisor.BuildInput(tmpl, rankingRaw, locations, jsonDepth)
+		var rankingSource string
+		semanticValuePriority, rankingSource, err = buildRescuePriority(tmpl, baselineSnapshot, contextRaw, locations, jsonDepth)
 		fatal(err)
-		semanticValuePriority = func(candidate model.Candidate) int {
-			return aiadvisor.ValueCandidateRelevance(rankingInput, aiadvisor.ValueCandidate{
-				Name:       candidate.Name,
-				Location:   candidate.Location,
-				JSONParent: candidate.JSONParent,
-			})
-		}
 		if verbose {
 			fmt.Printf("[*] Evidence-guided rescue context\n")
 			fmt.Printf("    source: %s\n", rankingSource)
