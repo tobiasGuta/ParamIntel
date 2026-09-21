@@ -39,11 +39,11 @@ func TestItemsGroundTruth(t *testing.T) {
 
 func TestSearchGroundTruth(t *testing.T) {
 	baseline := decodeLabJSON(t, handleSearch, "/search?debug=true")
-	if _, ok := baseline["sorted"]; ok {
+	if _, ok := baseline["ordered"]; ok {
 		t.Fatal("debug must remain a clean miss")
 	}
-	changed := decodeLabJSON(t, handleSearch, "/search?sort=asc")
-	if changed["sorted"] != true {
+	changed := decodeLabJSON(t, handleSearch, "/search?order=asc")
+	if changed["ordered"] != true {
 		t.Fatalf("changed=%v", changed)
 	}
 }
