@@ -6,6 +6,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -42,6 +43,9 @@ func main() {
 	raw, err := json.MarshalIndent(d, "", "  ")
 	fatal(err)
 	raw = append(raw, '\n')
+	if dir := filepath.Dir(filepath.Clean(outputPath)); dir != "." {
+		fatal(os.MkdirAll(dir, 0700))
+	}
 	fatal(os.WriteFile(outputPath, raw, 0600))
 
 	fmt.Printf("captured records: %d\n", d.CapturedRecords)
