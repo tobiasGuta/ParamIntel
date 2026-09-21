@@ -1,0 +1,1 @@
+GET /projects HTTP/1.1\nHost: 127.0.0.1:41782\nAccept: application/json\nConnection: close\n\n
