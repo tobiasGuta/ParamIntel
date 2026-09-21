@@ -307,6 +307,99 @@ func TestVerboseRejectionExplainsNegativeControl(t *testing.T) {
 	}
 }
 
+func TestResidualDecisionObserverFiresBeforeSemanticRescue(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("format") == "json" {
+			fmt.Fprint(w, `{"ok":true,"format":"json"}`)
+			return
+		}
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	tmpl := model.RequestTemplate{Method: "GET", URL: srv.URL, Headers: make(http.Header)}
+	p, err := baseline.Build(context.Background(), srv.Client(), tmpl, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var observed []model.ParameterResult
+	var budgets []int
+	e := Engine{Client: srv.Client(), Config: Config{
+		ChunkSize:        1,
+		Trials:           3,
+		MinConfidence:    .60,
+		ValueAware:       true,
+		ValueAwareBudget: 16,
+		ResidualDecisionObserver: func(result model.ParameterResult, remainingBudget int) {
+			observed = append(observed, result)
+			budgets = append(budgets, remainingBudget)
+		},
+	}}
+
+	results, err := e.Scan(context.Background(), tmpl, p, []string{"format"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Name != "format" || results[0].DiscoveryMode != "value_aware" {
+		t.Fatalf("results=%+v", results)
+	}
+	if len(observed) != 1 {
+		t.Fatalf("observed=%d want=1", len(observed))
+	}
+	if observed[0].Name != "format" {
+		t.Fatalf("observed=%+v", observed[0])
+	}
+	if budgets[0] != 16 {
+		t.Fatalf("budget=%d want=16", budgets[0])
+	}
+	if observed[0].Confidence != 0 || observed[0].CandidateChanged != 0 || observed[0].RandomControlChanged != 0 {
+		t.Fatalf("residual state should precede semantic proof: %+v", observed[0])
+	}
+}
+
+func TestResidualDecisionObserverDoesNotCaptureAlreadyVerifiedFinding(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Has("debug") {
+			fmt.Fprint(w, `{"ok":true,"debug_seen":true}`)
+			return
+		}
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	tmpl := model.RequestTemplate{Method: "GET", URL: srv.URL, Headers: make(http.Header)}
+	p, err := baseline.Build(context.Background(), srv.Client(), tmpl, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	observed := 0
+	e := Engine{Client: srv.Client(), Config: Config{
+		ChunkSize:        1,
+		Trials:           3,
+		MinConfidence:    .60,
+		ValueAware:       true,
+		ValueAwareBudget: 16,
+		ResidualDecisionObserver: func(model.ParameterResult, int) {
+			observed++
+		},
+	}}
+
+	results, err := e.Scan(context.Background(), tmpl, p, []string{"debug"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Name != "debug" {
+		t.Fatalf("results=%+v", results)
+	}
+	if observed != 0 {
+		t.Fatalf("observer captured %d already-verified findings; want 0", observed)
+	}
+}
+
 func readForm(t *testing.T, r *http.Request) url.Values {
 	t.Helper()
 	if err := r.ParseForm(); err != nil {
