@@ -14,8 +14,8 @@ import (
 )
 
 func TestVersion(t *testing.T) {
-	if version != "0.9.3" {
-		t.Fatalf("version=%q want=0.9.3", version)
+	if version != "0.10.0" {
+		t.Fatalf("version=%q want=0.10.0", version)
 	}
 }
 

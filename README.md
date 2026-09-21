@@ -1,4 +1,4 @@
-# ParamIntel v0.9.3
+# ParamIntel v0.10.0
 
 ParamIntel is an evidence-oriented HTTP parameter discovery and behavioral-analysis tool for authorized web security testing and bug bounty research.
 
@@ -22,13 +22,15 @@ ParamIntel has evolved in deliberate layers:
 - **v0.8 — deeper structured JSON discovery:** optionally test narrowly response-derived nested fields behind exactly one missing object parent;
 - **v0.9 — local OpenAPI candidate intelligence:** use a local OpenAPI document to derive high-signal response-only JSON hypotheses and, when unambiguous, choose safe boolean/integer probe types;
 - **v0.9.1 — response decoding reliability:** normalize replayed `Accept-Encoding` so Burp-captured mobile requests can use Go's transparent response decoding and retain JSON-semantic evidence;
-- **v0.9.2 — OpenAPI nullability consistency:** preserve nullable schema provenance and withhold schema-typed shortcuts from nullable scalar declarations.
+- **v0.9.2 — OpenAPI nullability consistency:** preserve nullable schema provenance and withhold schema-typed shortcuts from nullable scalar declarations;
+- **v0.9.3 — supported Go runtime baseline:** move the supported minimum to Go 1.26 and validate the full release gate on Go 1.26.x and Go 1.27.x;
+- **v0.10 — AI Semantic Value Advisor:** optionally propose bounded application-specific values for known candidates after deterministic value-aware discovery cleanly misses, while preserving the same candidate/control verification and confidence model.
 
-The v0.9 governing rule is:
+The current governing rule is:
 
-> **OpenAPI may tell ParamIntel what is worth testing, where it may belong, and—in a narrow scalar case—which JSON type to use. Only live application behavior, repeated trials, paired random-name controls, and existing confidence/evidence rules may produce a finding.**
+> **OpenAPI and AI may tell ParamIntel what is worth testing, where it may belong, or which bounded value hypothesis is worth trying. Only live application behavior, repeated trials, paired random-name controls, and existing confidence/evidence rules may produce a finding.**
 
-Schema metadata is hypothesis input, not evidence.
+Schema metadata and AI output are hypothesis input, not evidence.
 
 ## What v0.9 adds
 
@@ -329,6 +331,43 @@ Then:
 
 The provider receives bounded structural metadata rather than raw captured traffic. Hostnames, Authorization/Cookie data, query/form values, JSON primitive values, raw response text, arbitrary headers, and user wordlist names are intentionally excluded.
 
+
+## AI Semantic Value Advisor
+
+The AI Semantic Value Advisor is also optional and disabled by default. It is a second-stage rescue path for candidate names that normal probing and ParamIntel's deterministic semantic profiles fail to verify.
+
+It does **not** replace value-aware discovery. ParamIntel first tries the existing deterministic path, then consults AI only for clean misses that still have request budget available.
+
+For Gemini:
+
+```powershell
+.\paramintel.exe `
+  -request .\burprequests\request.txt `
+  -ai-value-advisor `
+  -ai-provider gemini `
+  -ai-value-budget 4 `
+  -ai-value-candidate-budget 8 `
+  -value-aware-budget 96 `
+  -baseline 3 `
+  -trials 3 `
+  -verbose
+```
+
+The value advisor receives sanitized application structure, candidate metadata, deterministic values already covered locally, and only bounded locally filtered enum-like semantic hints from relevant response fields. Arbitrary primitive response values and raw response text are not exposed to the provider.
+
+AI candidate-query budget is scheduled using local structural relevance so scarce model calls are spent on candidates supported by the observed application shape before unrelated generic candidates.
+
+For each admitted AI value, ParamIntel still requires:
+
+- a meaningful candidate response;
+- a same-value random-name control that does not reproduce the behavior;
+- complete repeated candidate/control verification;
+- the normal confidence threshold.
+
+Verified AI-value discoveries record `discovery_mode: ai_value_aware`. AI rationale and priority never contribute to confidence.
+
+The reproducible localhost acceptance lab is in `labs/semantic-value-advisor`.
+
 ## Rate-limit and backoff integrity
 
 Known limiter/backoff responses are rejected before they can become behavioral evidence.
@@ -400,7 +439,7 @@ Confirm version:
 Expected:
 
 ```text
-ParamIntel v0.9.2
+ParamIntel v0.10.0
 ```
 
 ## Basic query discovery
