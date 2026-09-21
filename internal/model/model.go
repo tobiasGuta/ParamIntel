@@ -230,6 +230,32 @@ type AIValueAdvisorSummary struct {
 	VerifiedParameters int    `json:"verified_parameters"`
 }
 
+type RescueCandidateAudit struct {
+	Name                string `json:"name"`
+	Location            string `json:"location"`
+	JSONPath            string `json:"json_path,omitempty"`
+	EvidenceTier        string `json:"evidence_tier"`
+	SourcePriority      int    `json:"source_priority"`
+	ContextRelevance    int    `json:"context_relevance"`
+	Reason              string `json:"reason"`
+	DeterministicValues int    `json:"deterministic_values"`
+	AIQueried           bool   `json:"ai_queried"`
+	AIValues            int    `json:"ai_values"`
+	BudgetBefore        int    `json:"budget_before"`
+	BudgetAfter         int    `json:"budget_after"`
+	RequestsUsed        int    `json:"requests_used"`
+	Outcome             string `json:"outcome"`
+	DiscoveryMode       string `json:"discovery_mode,omitempty"`
+}
+
+type ValueAwareSummary struct {
+	Budget              int                    `json:"budget"`
+	RequestsUsed        int                    `json:"requests_used"`
+	CandidatesAttempted int                    `json:"candidates_attempted"`
+	VerifiedParameters  int                    `json:"verified_parameters"`
+	CandidateAudit      []RescueCandidateAudit `json:"candidate_audit,omitempty"`
+}
+
 type ScanReport struct {
 	Version        string                 `json:"version"`
 	Target         string                 `json:"target"`
@@ -237,6 +263,7 @@ type ScanReport struct {
 	Baseline       BaselineSummary        `json:"baseline"`
 	AIAdvisor      *AIAdvisorSummary      `json:"ai_advisor,omitempty"`
 	AIValueAdvisor *AIValueAdvisorSummary `json:"ai_value_advisor,omitempty"`
+	ValueAware     *ValueAwareSummary     `json:"value_aware,omitempty"`
 	Parameters     []ParameterResult      `json:"parameters"`
 }
 
