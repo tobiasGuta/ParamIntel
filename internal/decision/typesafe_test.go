@@ -361,10 +361,22 @@ func TestHybridPlannerFailsClosedOnTypeSafeHTTP429(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	state := State{
+		Candidate: CandidateState{
+			Name:      "region",
+			Location:  "query",
+			ValueKind: "string",
+		},
+		Evidence: EvidenceState{
+			Paths: []string{"$.aliases.region"},
+		},
+		RemainingRequestBudget: 8,
+	}
+
 	plan, err := (HybridPlanner{
 		Local:    HeuristicPlanner{},
 		Provider: provider,
-	}).PlanNext(context.Background(), testTypeSafeDecisionRequest().State)
+	}).PlanNext(context.Background(), state)
 	if err != nil {
 		t.Fatal(err)
 	}
