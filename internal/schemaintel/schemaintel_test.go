@@ -461,3 +461,70 @@ paths:
           description: ok
 components: {}
 `
+
+
+func TestAnalyzeBodylessGETUsesResponseSchemaWithoutAdmittingJSONCandidates(t *testing.T) {
+	doc, err := Parse([]byte(bodylessGetSpec))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tmpl := model.RequestTemplate{
+		Method:  http.MethodGet,
+		URL:     "https://api.example.test/dashboard",
+		Headers: http.Header{},
+	}
+
+	report, err := Analyze(
+		doc,
+		tmpl,
+		stableJSONBaseline(200, "application/json"),
+		DefaultConfig(),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Operation.SpecPath != "/dashboard" || report.Operation.Method != http.MethodGet {
+		t.Fatalf("operation=%+v", report.Operation)
+	}
+	if report.RequestMediaType != "" {
+		t.Fatalf("request media type=%q want empty for bodyless request", report.RequestMediaType)
+	}
+	if report.ResponseMediaType != "application/json" {
+		t.Fatalf("response media type=%q", report.ResponseMediaType)
+	}
+	if len(report.RequestProperties) != 0 {
+		t.Fatalf("request properties=%+v", report.RequestProperties)
+	}
+	if len(report.ResponseProperties) == 0 {
+		t.Fatal("expected response properties")
+	}
+	if len(report.Candidates) != 0 {
+		t.Fatalf("bodyless GET must not admit JSON candidates: %+v", report.Candidates)
+	}
+	if !skipContains(report.Skipped, "$.role", "informational only") {
+		t.Fatalf("missing bodyless informational skip: %+v", report.Skipped)
+	}
+}
+
+const bodylessGetSpec = `openapi: 3.0.1
+info:
+  title: bodyless get
+  version: "1"
+paths:
+  /dashboard:
+    get:
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  role:
+                    type: string
+                  available_credit:
+                    type: number
+components: {}
+`
