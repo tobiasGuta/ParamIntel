@@ -291,8 +291,13 @@ func main() {
 	}
 
 	var rescueAudits []model.RescueCandidateAudit
+	rescueEligible := 0
+	rescuePlanObserver := discovery.RescuePlanObserver(nil)
 	rescueAuditObserver := discovery.RescueAuditObserver(nil)
 	if valueAware && valueAwareBudget > 0 {
+		rescuePlanObserver = func(eligibleCandidates, budget int) {
+			rescueEligible = eligibleCandidates
+		}
 		rescueAuditObserver = func(audit model.RescueCandidateAudit) {
 			rescueAudits = append(rescueAudits, audit)
 		}
@@ -311,6 +316,7 @@ func main() {
 		ValueAwareBudget:     valueAwareBudget,
 		SemanticValueAdvisor:  semanticValueAdvisor,
 		SemanticValuePriority: semanticValuePriority,
+		RescuePlanObserver:    rescuePlanObserver,
 		RescueAuditObserver:   rescueAuditObserver,
 		JSONScaffold:          jsonScaffold,
 	}}
@@ -331,8 +337,13 @@ func main() {
 	if valueAware && valueAwareBudget > 0 {
 		valueAwareSummary = &model.ValueAwareSummary{
 			Budget:              valueAwareBudget,
+			EligibleCandidates:  rescueEligible,
 			CandidatesAttempted: len(rescueAudits),
 			CandidateAudit:      rescueAudits,
+		}
+		valueAwareSummary.CandidatesDeferred = rescueEligible - len(rescueAudits)
+		if valueAwareSummary.CandidatesDeferred < 0 {
+			valueAwareSummary.CandidatesDeferred = 0
 		}
 		for _, audit := range rescueAudits {
 			valueAwareSummary.RequestsUsed += audit.RequestsUsed
