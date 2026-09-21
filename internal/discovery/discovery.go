@@ -13,6 +13,7 @@ import (
 
 type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error)
 type SemanticValuePriority func(candidate model.Candidate) int
+type RescueAuditObserver func(model.RescueCandidateAudit)
 
 type Config struct {
 	ChunkSize            int
@@ -25,9 +26,10 @@ type Config struct {
 	Characterize         bool
 	ValueAware           bool
 	ValueAwareBudget     int
-	SemanticValueAdvisor SemanticValueAdvisor
+	SemanticValueAdvisor  SemanticValueAdvisor
 	SemanticValuePriority SemanticValuePriority
-	JSONScaffold         bool
+	RescueAuditObserver   RescueAuditObserver
+	JSONScaffold          bool
 }
 
 type Engine struct {
@@ -209,16 +211,24 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 				continue
 			}
 
+			rank := rankRescueCandidate(candidate, cfg.SemanticValuePriority)
+			budgetBefore := budget.remaining
+			usedBefore := budget.used
+			aiQueried := false
+			aiValueCount := 0
+
 			r, value, ok, err := e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, deterministicValues, cfg.Trials, cfg.MinConfidence, budget)
 			if err != nil {
 				return nil, err
 			}
 			discoveryMode := "value_aware"
 			if !ok && cfg.SemanticValueAdvisor != nil && !budget.exhausted {
+				aiQueried = true
 				aiValues, err := cfg.SemanticValueAdvisor(ctx, candidate, deterministicValues)
 				if err != nil {
 					return nil, err
 				}
+				aiValueCount = len(aiValues)
 				if len(aiValues) > 0 {
 					r, value, ok, err = e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, aiValues, cfg.Trials, cfg.MinConfidence, budget)
 					if err != nil {
@@ -227,6 +237,45 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 					discoveryMode = "ai_value_aware"
 				}
 			}
+
+			outcome := "miss"
+			if ok {
+				outcome = "verified"
+			} else if budget.exhausted {
+				outcome = "budget_exhausted"
+			}
+			audit := model.RescueCandidateAudit{
+				Name:                candidate.Name,
+				Location:            candidate.Location,
+				JSONPath:            candidate.JSONPath(),
+				EvidenceTier:        rank.tierLabel(),
+				SourcePriority:      rank.SourcePriority,
+				ContextRelevance:    rank.ContextRelevance,
+				Reason:              rank.auditReason(),
+				DeterministicValues: len(deterministicValues),
+				AIQueried:           aiQueried,
+				AIValues:            aiValueCount,
+				BudgetBefore:        budgetBefore,
+				BudgetAfter:         budget.remaining,
+				RequestsUsed:        budget.used - usedBefore,
+				Outcome:             outcome,
+			}
+			if ok {
+				audit.DiscoveryMode = discoveryMode
+			}
+			if cfg.RescueAuditObserver != nil {
+				cfg.RescueAuditObserver(audit)
+			}
+			e.verbosef("    rescue audit: %s tier=%s requests=%d budget=%d->%d outcome=%s ai_queried=%t\n",
+				fmtCandidate(candidate),
+				audit.EvidenceTier,
+				audit.RequestsUsed,
+				audit.BudgetBefore,
+				audit.BudgetAfter,
+				audit.Outcome,
+				audit.AIQueried,
+			)
+
 			if !ok {
 				continue
 			}
