@@ -79,6 +79,9 @@ func main() {
 	if valueAwareBudget < 0 {
 		fatal(fmt.Errorf("-value-aware-budget must be 0 or greater"))
 	}
+	if aiValueAdvisorEnabled && (!valueAware || valueAwareBudget == 0) {
+		fatal(fmt.Errorf("-ai-value-advisor requires -value-aware=true and a positive -value-aware-budget"))
+	}
 	fatal(validateDelay(delay))
 	fatal(validateAIOptions(aiAdvisorEnabled, aiValueAdvisorEnabled, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget, aiTimeout))
 	fatal(validateJSONScaffoldOptions(jsonScaffold, contextResponsePath))
@@ -233,9 +236,10 @@ func main() {
 	var semanticValueAdvisor discovery.SemanticValueAdvisor
 	if aiValueAdvisorEnabled {
 		aiValueSummary = &model.AIValueAdvisorSummary{
-			Provider:    aiProvider.Name(),
-			Model:       aiProvider.Model(),
-			InputPolicy: "sanitized structure and candidate metadata only",
+			Provider:      aiProvider.Name(),
+			Model:         aiProvider.Model(),
+			InputPolicy:   "sanitized structure and candidate metadata only",
+			ContextSource: aiContextSource,
 		}
 		remainingCandidates := aiValueCandidateBudget
 		semanticValueAdvisor = func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error) {
