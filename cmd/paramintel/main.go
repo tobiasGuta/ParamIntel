@@ -289,6 +289,13 @@ func main() {
 				fmt.Printf("    semantic hints: %d\n", len(valueInput.SemanticHints))
 				fmt.Printf("    suggested values: %d\n", result.SuggestedCount)
 				fmt.Printf("    accepted value hypotheses: %d\n", result.AcceptedCount)
+				for _, item := range result.Audit {
+					fmt.Printf("    value hypothesis: %q kind=%s priority=%d admission=%s", item.Value, item.Kind, item.Priority, item.Admission)
+					if item.RejectionReason != "" {
+						fmt.Printf(" rejection=%s", item.RejectionReason)
+					}
+					fmt.Printf("\n")
+				}
 			}
 			return result.Values, nil
 		}
