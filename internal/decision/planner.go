@@ -17,6 +17,7 @@ type Plan struct {
 	Model           string             `json:"model,omitempty"`
 	Gated           bool               `json:"gated"`
 	GateReason      string             `json:"gate_reason,omitempty"`
+	DecisionReason  string             `json:"decision_reason,omitempty"`
 	Usage           Usage              `json:"usage,omitempty"`
 }
 
@@ -46,6 +47,7 @@ func (p Planner) PlanNext(ctx context.Context, state State) (Plan, error) {
 			Confidence:      1,
 			Gated:           true,
 			GateReason:      "request budget exhausted",
+			DecisionReason:  "request budget exhausted",
 		}, nil
 	}
 	if p.Provider == nil {
