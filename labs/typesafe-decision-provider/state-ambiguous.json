@@ -1,0 +1,22 @@
+{
+  "candidate": {
+    "name": "mode",
+    "location": "query",
+    "discovery_mode": "",
+    "value_kind": "string"
+  },
+  "verification": {
+    "candidate_changed": 1,
+    "candidate_trials": 3,
+    "control_changed": 1,
+    "control_trials": 3,
+    "confidence": 0.0
+  },
+  "evidence": {
+    "kinds": [
+      "body_length"
+    ],
+    "paths": []
+  },
+  "remaining_request_budget": 12
+}
