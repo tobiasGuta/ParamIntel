@@ -111,3 +111,59 @@ func TestAIValueAdvisorNotCalledWhenDeterministicValueSucceeds(t *testing.T) {
 		t.Fatalf("results=%+v", results)
 	}
 }
+
+
+func TestAIValueAdvisorPrioritizesHighSignalCandidateBeforeBudgetIsSpent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		resp := map[string]any{"projects": 2, "available_visibilities": []string{"public", "private", "internal"}}
+		if r.URL.Query().Get("visibility") == "internal" {
+			resp["internal_projects"] = 1
+		}
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer srv.Close()
+
+	tmpl := model.RequestTemplate{Method: http.MethodGet, URL: srv.URL + "/api/projects", Headers: make(http.Header)}
+	profile, err := baseline.Build(context.Background(), srv.Client(), tmpl, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var called []string
+	engine := Engine{Client: srv.Client(), Config: Config{
+		ChunkSize:        4,
+		Trials:           3,
+		MinConfidence:    .60,
+		Locations:        []string{model.LocationQuery},
+		ValueAware:       true,
+		ValueAwareBudget: 8,
+		SemanticValuePriority: func(candidate model.Candidate) int {
+			if candidate.Name == "visibility" {
+				return 80
+			}
+			return 0
+		},
+		SemanticValueAdvisor: func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error) {
+			called = append(called, candidate.Name)
+			if len(called) > 1 {
+				return nil, nil
+			}
+			if candidate.Name != "visibility" {
+				t.Fatalf("first AI value query spent on %q, want visibility", candidate.Name)
+			}
+			return []model.ProbeValue{model.StringValue("internal")}, nil
+		},
+	}}
+
+	results, err := engine.Scan(context.Background(), tmpl, profile, []string{"account_id", "visibility"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(called) == 0 || called[0] != "visibility" {
+		t.Fatalf("called=%v", called)
+	}
+	if len(results) != 1 || results[0].Name != "visibility" || results[0].DiscoveryMode != "ai_value_aware" {
+		t.Fatalf("results=%+v", results)
+	}
+}
