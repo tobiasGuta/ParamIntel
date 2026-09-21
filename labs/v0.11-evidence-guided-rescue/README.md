@@ -11,6 +11,41 @@ It covers four separate questions:
 
 The lab listens only on `127.0.0.1:41782`.
 
+## Fast path — automated deterministic benchmark
+
+From the repository root:
+
+```powershell
+pwsh .\labs\v0.11-evidence-guided-rescue\run-benchmark.ps1
+```
+
+The runner:
+
+- builds the v0.11 lab and ParamIntel into `.paramintel\v0.11-lab`;
+- starts the localhost lab automatically;
+- runs scenarios A, B, C, and the no-AI control for D;
+- validates the JSON report against `expected.json`;
+- stops the lab process when finished;
+- leaves the generated reports under `.paramintel\v0.11-lab`.
+
+Expected final summary:
+
+```text
+=== v0.11 dedicated lab result ===
+Deterministic scenarios: PASS
+Gemini scenario: skipped (use -WithGemini when desired)
+```
+
+To include the Gemini semantic-value scenario after `GEMINI_API_KEY` is already set:
+
+```powershell
+pwsh .\labs\v0.11-evidence-guided-rescue\run-benchmark.ps1 -WithGemini
+```
+
+If Gemini does not produce the application-specific value, that part is reported as inconclusive rather than being treated as proof.
+
+---
+
 ## 1. Start the lab
 
 From the repository root:
