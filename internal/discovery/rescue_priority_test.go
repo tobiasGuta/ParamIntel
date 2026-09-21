@@ -146,3 +146,22 @@ func TestEvidenceGuidedRescueSpendsBudgetOnApplicationEvidenceBeforeAI(t *testin
 		t.Fatalf("application-backed candidate did not receive rescue budget first: %+v", results[0])
 	}
 }
+
+
+func TestRescueRankPrefersCheaperScreenWithinEqualEvidence(t *testing.T) {
+	sortCandidate := model.Candidate{Name: "sort", Location: model.LocationQuery}
+	debugCandidate := model.Candidate{Name: "debug", Location: model.LocationQuery}
+
+	sortRank := rankRescueCandidate(sortCandidate, nil)
+	debugRank := rankRescueCandidate(debugCandidate, nil)
+
+	if sortRank.Tier != rescueTierHeuristic || debugRank.Tier != rescueTierHeuristic {
+		t.Fatalf("unexpected tiers: sort=%+v debug=%+v", sortRank, debugRank)
+	}
+	if sortRank.EstimatedScreenCost != 2 || debugRank.EstimatedScreenCost != 4 {
+		t.Fatalf("unexpected costs: sort=%+v debug=%+v", sortRank, debugRank)
+	}
+	if !rescueRankLess(sortRank, debugRank) {
+		t.Fatalf("cheaper equal-evidence candidate should run first: sort=%+v debug=%+v", sortRank, debugRank)
+	}
+}
