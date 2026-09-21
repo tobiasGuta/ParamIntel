@@ -13,6 +13,7 @@ type semanticBudget struct {
 	remaining              int
 	used                   int
 	exhausted              bool
+	verificationFloorHit   bool
 	minActionableRemaining int
 }
 
@@ -36,6 +37,7 @@ func (b *semanticBudget) canStartValue() bool {
 	}
 	if b.remaining < b.minActionableRemaining {
 		b.exhausted = true
+		b.verificationFloorHit = true
 		return false
 	}
 	return true
