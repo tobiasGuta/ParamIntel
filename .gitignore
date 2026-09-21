@@ -13,6 +13,9 @@ burpresponses/
 wordlists/
 *.log
 
+# Local ParamIntel shadow captures
+.paramintel/
+
 # IDE / OS
 .vscode/
 .idea/
