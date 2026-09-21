@@ -253,6 +253,8 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			outcome := "miss"
 			if ok {
 				outcome = "verified"
+			} else if budget.verificationFloorHit {
+				outcome = "verification_budget_insufficient"
 			} else if budget.exhausted {
 				outcome = "budget_exhausted"
 			}
@@ -304,7 +306,9 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			accepted[key] = struct{}{}
 		}
 
-		if budget.exhausted {
+		if budget.verificationFloorHit {
+			e.verbosef("    semantic verification floor reached: %d/%d requests used; %d remain but cannot verify a new finding\n", budget.used, cfg.ValueAwareBudget, budget.remaining)
+		} else if budget.exhausted {
 			e.verbosef("    semantic probe budget exhausted: %d/%d requests used\n", budget.used, cfg.ValueAwareBudget)
 		} else {
 			e.verbosef("    semantic requests used: %d/%d\n", budget.used, cfg.ValueAwareBudget)
