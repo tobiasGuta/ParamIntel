@@ -102,3 +102,29 @@ func TestPlannerPreservesLowConfidenceProviderStopWithoutGate(t *testing.T) {
 		t.Fatalf("provider-selected STOP should not be labeled as gated: %+v", plan)
 	}
 }
+
+
+func TestPlannerAppliesValidChoiceWhenNumericGateDisabled(t *testing.T) {
+	provider := &stubProvider{result: Result{
+		Action:     ActionEnumProfile,
+		Confidence: 0.35,
+		Provider:   "stub",
+		Model:      "stub-model",
+		Probabilities: map[Action]float64{
+			ActionEnumProfile: 0.41,
+			ActionStop:        0.33,
+		},
+	}}
+	plan, err := (Planner{Provider: provider}).PlanNext(context.Background(), State{
+		RemainingRequestBudget: 10,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.SuggestedAction != ActionEnumProfile || plan.AppliedAction != ActionEnumProfile {
+		t.Fatalf("plan=%+v", plan)
+	}
+	if plan.Gated || plan.GateReason != "" {
+		t.Fatalf("numeric gate should be disabled by default: %+v", plan)
+	}
+}
