@@ -216,7 +216,7 @@ func main() {
 			for _, threshold := range marginThresholds {
 				acc := gateAcc[threshold]
 				shadowAction := plan.SuggestedAction
-				if shadowAction != decision.ActionStop && margin < threshold {
+				if threshold > 0 && shadowAction != decision.ActionStop && margin < threshold {
 					shadowAction = decision.ActionStop
 					acc.gatedNonStop++
 				}
