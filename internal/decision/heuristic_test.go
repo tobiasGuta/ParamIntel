@@ -85,3 +85,22 @@ func TestHeuristicPlannerStopsWhenBudgetExhausted(t *testing.T) {
 		t.Fatalf("Plan()=%q want=%q", got, ActionStop)
 	}
 }
+
+
+func TestHeuristicPlannerAbstainsWhenNoRuleMatches(t *testing.T) {
+	state := State{
+		Candidate:              CandidateState{Name: "delivery", ValueKind: "string"},
+		Evidence:               EvidenceState{Paths: []string{"$.supported_delivery_methods"}},
+		RemainingRequestBudget: 18,
+	}
+	decision := (HeuristicPlanner{}).Decide(state)
+	if decision.Decided {
+		t.Fatalf("expected abstain, got %+v", decision)
+	}
+	if decision.Action != ActionStop {
+		t.Fatalf("abstain action=%q want=%q", decision.Action, ActionStop)
+	}
+	if decision.Reason == "" {
+		t.Fatal("abstain reason is empty")
+	}
+}
