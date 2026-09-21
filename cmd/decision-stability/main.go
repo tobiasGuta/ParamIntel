@@ -20,6 +20,9 @@ type observation struct {
 	AppliedAction       decision.Action `json:"applied_action"`
 	Confidence          float64         `json:"confidence"`
 	SelectedProbability float64         `json:"selected_probability"`
+	RunnerUpAction      decision.Action `json:"runner_up_action,omitempty"`
+	RunnerUpProbability float64         `json:"runner_up_probability"`
+	DecisionMargin      float64         `json:"decision_margin"`
 	Gated               bool            `json:"gated"`
 	LatencyMS           int64           `json:"latency_ms"`
 }
@@ -40,6 +43,9 @@ type summary struct {
 	SelectedProbabilityMin     float64       `json:"selected_probability_min"`
 	SelectedProbabilityMean    float64       `json:"selected_probability_mean"`
 	SelectedProbabilityMax     float64       `json:"selected_probability_max"`
+	DecisionMarginMin          float64       `json:"decision_margin_min"`
+	DecisionMarginMean         float64       `json:"decision_margin_mean"`
+	DecisionMarginMax          float64       `json:"decision_margin_max"`
 	ConfidenceMean             float64       `json:"confidence_mean"`
 	LatencyMSMin               int64         `json:"latency_ms_min"`
 	LatencyMSMean              float64       `json:"latency_ms_mean"`
@@ -102,12 +108,16 @@ func main() {
 		started := time.Now()
 		plan, err := planner.PlanNext(context.Background(), state)
 		fatal(err)
+		runnerUpAction, runnerUpProbability := runnerUp(plan.Probabilities, plan.SuggestedAction)
 		observations = append(observations, observation{
 			Run:                 i,
 			SuggestedAction:     plan.SuggestedAction,
 			AppliedAction:       plan.AppliedAction,
 			Confidence:          plan.Confidence,
 			SelectedProbability: plan.SelectedProbability,
+			RunnerUpAction:      runnerUpAction,
+			RunnerUpProbability: runnerUpProbability,
+			DecisionMargin:      plan.SelectedProbability - runnerUpProbability,
 			Gated:               plan.Gated,
 			LatencyMS:           time.Since(started).Milliseconds(),
 		})
@@ -121,11 +131,13 @@ func main() {
 func summarize(observations []observation) summary {
 	counts := map[decision.Action]int{}
 	var stopCount, gatedCount int
-	var probabilitySum, confidenceSum float64
+	var probabilitySum, marginSum, confidenceSum float64
 	var latencySum int64
 
 	minProbability := observations[0].SelectedProbability
 	maxProbability := minProbability
+	minMargin := observations[0].DecisionMargin
+	maxMargin := minMargin
 	minLatency := observations[0].LatencyMS
 	maxLatency := minLatency
 
@@ -138,6 +150,7 @@ func summarize(observations []observation) summary {
 			gatedCount++
 		}
 		probabilitySum += o.SelectedProbability
+		marginSum += o.DecisionMargin
 		confidenceSum += o.Confidence
 		latencySum += o.LatencyMS
 		if o.SelectedProbability < minProbability {
@@ -145,6 +158,12 @@ func summarize(observations []observation) summary {
 		}
 		if o.SelectedProbability > maxProbability {
 			maxProbability = o.SelectedProbability
+		}
+		if o.DecisionMargin < minMargin {
+			minMargin = o.DecisionMargin
+		}
+		if o.DecisionMargin > maxMargin {
+			maxMargin = o.DecisionMargin
 		}
 		if o.LatencyMS < minLatency {
 			minLatency = o.LatencyMS
@@ -186,12 +205,30 @@ func summarize(observations []observation) summary {
 		SelectedProbabilityMin:  minProbability,
 		SelectedProbabilityMean: probabilitySum / n,
 		SelectedProbabilityMax:  maxProbability,
+		DecisionMarginMin:       minMargin,
+		DecisionMarginMean:      marginSum / n,
+		DecisionMarginMax:       maxMargin,
 		ConfidenceMean:          confidenceSum / n,
 		LatencyMSMin:            minLatency,
 		LatencyMSMean:           float64(latencySum) / n,
 		LatencyMSMax:            maxLatency,
 		Observations:            observations,
 	}
+}
+
+func runnerUp(probabilities map[decision.Action]float64, selected decision.Action) (decision.Action, float64) {
+	var action decision.Action
+	var probability float64
+	for candidate, value := range probabilities {
+		if candidate == selected {
+			continue
+		}
+		if value > probability || (value == probability && string(candidate) < string(action)) {
+			action = candidate
+			probability = value
+		}
+	}
+	return action, probability
 }
 
 func fatal(err error) {
