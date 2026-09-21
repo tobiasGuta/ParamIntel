@@ -45,8 +45,12 @@ func (HeuristicPlanner) Decide(state State) HeuristicDecision {
 		return HeuristicDecision{Action: ActionIntegerBoundaryProfile, Decided: true, Reason: "integer rule matched"}
 	}
 
+	if structural, ok := structuralEvidenceDecision(state.Candidate, state.Evidence); ok {
+		return structural
+	}
+
 	nameTokens := semanticTokens(state.Candidate.Name)
-	pathTokens := map[string]struct{}{}
+	pathTokens := map[string]struct{}{
 	for _, path := range state.Evidence.Paths {
 		for _, token := range semanticTokens(path) {
 			pathTokens[token] = struct{}{}
@@ -69,6 +73,95 @@ func (HeuristicPlanner) Decide(state State) HeuristicDecision {
 	}
 
 	return HeuristicDecision{Action: ActionStop, Decided: false, Reason: "no deterministic rule matched"}
+}
+
+
+
+func structuralEvidenceDecision(candidate CandidateState, evidence EvidenceState) (HeuristicDecision, bool) {
+	candidateTokens := semanticTokens(candidate.Name)
+	if len(candidateTokens) == 0 {
+		return HeuristicDecision{}, false
+	}
+
+	for _, path := range evidence.Paths {
+		pathTokens := semanticTokens(path)
+		start, end, ok := findTokenSequence(pathTokens, candidateTokens)
+		if !ok {
+			continue
+		}
+
+		if start > 0 {
+			switch canonicalToken(pathTokens[start-1]) {
+			case "can", "has", "is":
+				return HeuristicDecision{
+					Action:  ActionBooleanProfile,
+					Decided: true,
+					Reason:  "evidence path uses a boolean relation around the candidate",
+				}, true
+			case "supported", "available", "allowed", "valid", "possible":
+				return HeuristicDecision{
+					Action:  ActionEnumProfile,
+					Decided: true,
+					Reason:  "evidence path exposes a bounded value-set relation around the candidate",
+				}, true
+			case "max", "maximum", "min", "minimum":
+				return HeuristicDecision{
+					Action:  ActionIntegerBoundaryProfile,
+					Decided: true,
+					Reason:  "evidence path exposes a numeric boundary relation around the candidate",
+				}, true
+			}
+		}
+
+		if end < len(pathTokens) {
+			switch canonicalToken(pathTokens[end]) {
+			case "supported", "enabled", "active":
+				return HeuristicDecision{
+					Action:  ActionBooleanProfile,
+					Decided: true,
+					Reason:  "evidence path exposes a boolean capability relation around the candidate",
+				}, true
+			}
+		}
+	}
+
+	return HeuristicDecision{}, false
+}
+
+func findTokenSequence(haystack, needle []string) (int, int, bool) {
+	if len(needle) == 0 || len(needle) > len(haystack) {
+		return 0, 0, false
+	}
+	for start := 0; start+len(needle) <= len(haystack); start++ {
+		match := true
+		for i := range needle {
+			if canonicalToken(haystack[start+i]) != canonicalToken(needle[i]) {
+				match = false
+				break
+			}
+		}
+		if match {
+			return start, start + len(needle), true
+		}
+	}
+	return 0, 0, false
+}
+
+func canonicalToken(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	switch {
+	case strings.HasSuffix(s, "ies") && len(s) > 3:
+		return strings.TrimSuffix(s, "ies") + "y"
+	case (strings.HasSuffix(s, "ses") || strings.HasSuffix(s, "xes") || strings.HasSuffix(s, "zes") || strings.HasSuffix(s, "ches") || strings.HasSuffix(s, "shes")) && len(s) > 3:
+		return strings.TrimSuffix(s, "es")
+	case strings.HasSuffix(s, "s") && len(s) > 3 &&
+		!strings.HasSuffix(s, "ss") &&
+		!strings.HasSuffix(s, "us") &&
+		!strings.HasSuffix(s, "is"):
+		return strings.TrimSuffix(s, "s")
+	default:
+		return s
+	}
 }
 
 func semanticTokens(s string) []string {
