@@ -1,0 +1,22 @@
+{
+  "cases": [
+    {"name":"holdout2-plan-enum","state":"labs/typesafe-decision-provider/holdout2-plan.json","expected_action":"enum_profile"},
+    {"name":"holdout2-timezone-enum","state":"labs/typesafe-decision-provider/holdout2-timezone.json","expected_action":"enum_profile"},
+    {"name":"holdout2-region-related","state":"labs/typesafe-decision-provider/holdout2-region.json","expected_action":"related_value_profile"},
+    {"name":"holdout2-provider-related","state":"labs/typesafe-decision-provider/holdout2-provider.json","expected_action":"related_value_profile"},
+    {"name":"holdout2-owner-nullability","state":"labs/typesafe-decision-provider/holdout2-owner.json","expected_action":"nullability_profile"},
+    {"name":"holdout2-subtitle-nullability","state":"labs/typesafe-decision-provider/holdout2-subtitle.json","expected_action":"nullability_profile"},
+    {"name":"holdout2-description-empty","state":"labs/typesafe-decision-provider/holdout2-description.json","expected_action":"empty_value_profile"},
+    {"name":"holdout2-comment-empty","state":"labs/typesafe-decision-provider/holdout2-comment.json","expected_action":"empty_value_profile"},
+    {"name":"holdout2-identifier-case","state":"labs/typesafe-decision-provider/holdout2-identifier.json","expected_action":"case_variation_profile"},
+    {"name":"holdout2-token-case","state":"labs/typesafe-decision-provider/holdout2-token.json","expected_action":"case_variation_profile"},
+    {"name":"holdout2-sandbox-boolean","state":"labs/typesafe-decision-provider/holdout2-sandbox.json","expected_action":"boolean_profile"},
+    {"name":"holdout2-beta-boolean","state":"labs/typesafe-decision-provider/holdout2-beta.json","expected_action":"boolean_profile"},
+    {"name":"holdout2-attempts-integer","state":"labs/typesafe-decision-provider/holdout2-attempts.json","expected_action":"integer_boundary_profile"},
+    {"name":"holdout2-ttl-integer","state":"labs/typesafe-decision-provider/holdout2-ttl.json","expected_action":"integer_boundary_profile"},
+    {"name":"holdout2-marker-stop","state":"labs/typesafe-decision-provider/holdout2-marker.json","expected_action":"stop"},
+    {"name":"holdout2-digest-stop","state":"labs/typesafe-decision-provider/holdout2-digest.json","expected_action":"stop"},
+    {"name":"holdout2-link-stop","state":"labs/typesafe-decision-provider/holdout2-link.json","expected_action":"stop"},
+    {"name":"holdout2-trace-stop","state":"labs/typesafe-decision-provider/holdout2-trace.json","expected_action":"stop"}
+  ]
+}
