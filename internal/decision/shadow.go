@@ -14,7 +14,7 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
 
-const ShadowCaptureSchemaVersion = 1
+const ShadowCaptureSchemaVersion = 2
 
 type ShadowCaptureRecord struct {
 	SchemaVersion int    `json:"schema_version"`
@@ -36,6 +36,14 @@ func StateFromParameterResult(result model.ParameterResult, remainingRequestBudg
 			kindsSet[kind] = struct{}{}
 		}
 		if path := strings.TrimSpace(evidence.Path); path != "" {
+			pathsSet[path] = struct{}{}
+		}
+	}
+	for _, source := range result.CandidateSources {
+		if sourceName := strings.TrimSpace(source.Source); sourceName != "" {
+			kindsSet["candidate_source:"+sourceName] = struct{}{}
+		}
+		if path := strings.TrimSpace(source.Path); path != "" {
 			pathsSet[path] = struct{}{}
 		}
 	}
@@ -83,7 +91,7 @@ func NewShadowCaptureRecord(state State) (ShadowCaptureRecord, error) {
 	return ShadowCaptureRecord{
 		SchemaVersion: ShadowCaptureSchemaVersion,
 		ID:            hex.EncodeToString(sum[:12]),
-		Source:        "paramintel_verified_parameter_pre_characterization",
+		Source:        "paramintel_residual_pre_semantic_rescue",
 		State:         state,
 	}, nil
 }
