@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-const DefaultMinChoiceProbability = 0.80
+const DefaultMinChoiceProbability = 0.0
 
 type Plan struct {
 	SuggestedAction Action             `json:"suggested_action"`
@@ -52,9 +52,6 @@ func (p Planner) PlanNext(ctx context.Context, state State) (Plan, error) {
 		return Plan{}, fmt.Errorf("decision provider is required")
 	}
 	minChoiceProbability := p.MinChoiceProbability
-	if minChoiceProbability == 0 {
-		minChoiceProbability = DefaultMinChoiceProbability
-	}
 	if minChoiceProbability < 0 || minChoiceProbability > 1 {
 		return Plan{}, fmt.Errorf("minimum choice probability must be between 0 and 1")
 	}
@@ -83,7 +80,7 @@ func (p Planner) PlanNext(ctx context.Context, state State) (Plan, error) {
 		return Plan{}, fmt.Errorf("provider response missing probability for selected action %q", result.Action)
 	}
 	plan.SelectedProbability = selectedProbability
-	if result.Action != ActionStop {
+	if result.Action != ActionStop && minChoiceProbability > 0 {
 		if selectedProbability < minChoiceProbability {
 			plan.AppliedAction = ActionStop
 			plan.Gated = true
