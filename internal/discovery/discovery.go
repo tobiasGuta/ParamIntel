@@ -160,10 +160,37 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 		e.verbosef("    semantic probe budget: %d requests\n", cfg.ValueAwareBudget)
 
 		rescueTargets := append([]model.Candidate(nil), targets...)
-		if cfg.SemanticValueAdvisor != nil && cfg.SemanticValuePriority != nil {
-			sort.SliceStable(rescueTargets, func(i, j int) bool {
-				return cfg.SemanticValuePriority(rescueTargets[i]) > cfg.SemanticValuePriority(rescueTargets[j])
-			})
+		sort.SliceStable(rescueTargets, func(i, j int) bool {
+			left := rankRescueCandidate(rescueTargets[i], cfg.SemanticValuePriority)
+			right := rankRescueCandidate(rescueTargets[j], cfg.SemanticValuePriority)
+			return rescueRankLess(left, right)
+		})
+		if cfg.Verbose {
+			e.verbosef("[*] Evidence-guided rescue order\n")
+			position := 0
+			for _, candidate := range rescueTargets {
+				key := candidateKey(candidate)
+				if _, ok := accepted[key]; ok {
+					continue
+				}
+				if _, ok := rescueExcluded[key]; ok {
+					continue
+				}
+				deterministicValues := semantics.ProfileValues(candidate.Name, candidate.Location)
+				if len(deterministicValues) == 0 && cfg.SemanticValueAdvisor == nil {
+					continue
+				}
+				position++
+				rank := rankRescueCandidate(candidate, cfg.SemanticValuePriority)
+				e.verbosef("    [%d] %s tier=%s source_priority=%d relevance=%d reason=%s\n",
+					position,
+					fmtCandidate(candidate),
+					rank.tierLabel(),
+					rank.SourcePriority,
+					rank.ContextRelevance,
+					rank.auditReason(),
+				)
+			}
 		}
 
 		for _, candidate := range rescueTargets {
