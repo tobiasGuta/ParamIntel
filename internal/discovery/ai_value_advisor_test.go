@@ -136,8 +136,9 @@ func TestAIValueAdvisorPrioritizesHighSignalCandidateBeforeBudgetIsSpent(t *test
 		Trials:           3,
 		MinConfidence:    .60,
 		Locations:        []string{model.LocationQuery},
-		ValueAware:       true,
-		ValueAwareBudget: 8,
+		ValueAware:           true,
+		ValueAwareBudget:     8,
+		EvidenceGuidedRescue: true,
 		SemanticValuePriority: func(candidate model.Candidate) int {
 			if candidate.Name == "visibility" {
 				return 80
