@@ -419,3 +419,41 @@ deterministic core -> executes, controls, verifies, and scores evidence
 ```
 
 A wrong Jev routing decision can spend bounded characterization budget, but it cannot create a finding or raise finding confidence by itself.
+
+
+## Frozen holdout benchmark
+
+After generic structural evidence rules raised deterministic coverage on the development benchmark, that benchmark is no longer suitable for proving incremental Jev value. The deterministic planner must remain frozen while the holdout is evaluated.
+
+The holdout manifest is:
+
+```text
+labs/typesafe-decision-provider/benchmark-holdout.json
+```
+
+Run:
+
+```powershell
+go run .\cmd\decision-benchmark `
+  -manifest .\labs\typesafe-decision-provider\benchmark-holdout.json `
+  -runs 5
+```
+
+The benchmark now reports `stop_fallback_expected_rate`, which represents:
+
+```text
+deterministic decision when available
+otherwise STOP
+```
+
+Compare that directly with `hybrid_expected_rate`:
+
+```text
+STOP fallback ~= hybrid:
+    Jev has not demonstrated enough incremental value
+
+hybrid materially > STOP fallback:
+    Jev is adding residual semantic routing value
+```
+
+Do not add new deterministic rules based on holdout failures until the holdout result has been recorded.
