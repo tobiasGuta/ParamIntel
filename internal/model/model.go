@@ -249,13 +249,16 @@ type RescueCandidateAudit struct {
 }
 
 type ValueAwareSummary struct {
-	Budget              int                    `json:"budget"`
-	RequestsUsed        int                    `json:"requests_used"`
-	EligibleCandidates  int                    `json:"eligible_candidates"`
-	CandidatesAttempted int                    `json:"candidates_attempted"`
-	CandidatesDeferred  int                    `json:"candidates_deferred"`
-	VerifiedParameters  int                    `json:"verified_parameters"`
-	CandidateAudit      []RescueCandidateAudit `json:"candidate_audit,omitempty"`
+	Budget                  int                    `json:"budget"`
+	RequestsUsed            int                    `json:"requests_used"`
+	VerifiedRequests        int                    `json:"verified_requests"`
+	MissRequests            int                    `json:"miss_requests"`
+	BudgetExhaustedRequests int                    `json:"budget_exhausted_requests"`
+	EligibleCandidates      int                    `json:"eligible_candidates"`
+	CandidatesAttempted     int                    `json:"candidates_attempted"`
+	CandidatesDeferred      int                    `json:"candidates_deferred"`
+	VerifiedParameters      int                    `json:"verified_parameters"`
+	CandidateAudit          []RescueCandidateAudit `json:"candidate_audit,omitempty"`
 }
 
 type ScanReport struct {
