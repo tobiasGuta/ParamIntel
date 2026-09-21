@@ -10,8 +10,9 @@ const DefaultMinChoiceProbability = 0.80
 type Plan struct {
 	SuggestedAction Action             `json:"suggested_action"`
 	AppliedAction   Action             `json:"applied_action"`
-	Confidence      float64            `json:"confidence"`
-	Probabilities   map[Action]float64 `json:"probabilities,omitempty"`
+	Confidence          float64            `json:"confidence"`
+	SelectedProbability float64            `json:"selected_probability"`
+	Probabilities       map[Action]float64 `json:"probabilities,omitempty"`
 	Provider        string             `json:"provider,omitempty"`
 	Model           string             `json:"model,omitempty"`
 	Gated           bool               `json:"gated"`
@@ -77,11 +78,12 @@ func (p Planner) PlanNext(ctx context.Context, state State) (Plan, error) {
 		Model:           result.Model,
 		Usage:           result.Usage,
 	}
+	selectedProbability, ok := result.Probabilities[result.Action]
+	if !ok {
+		return Plan{}, fmt.Errorf("provider response missing probability for selected action %q", result.Action)
+	}
+	plan.SelectedProbability = selectedProbability
 	if result.Action != ActionStop {
-		selectedProbability, ok := result.Probabilities[result.Action]
-		if !ok {
-			return Plan{}, fmt.Errorf("provider response missing probability for selected action %q", result.Action)
-		}
 		if selectedProbability < minChoiceProbability {
 			plan.AppliedAction = ActionStop
 			plan.Gated = true
