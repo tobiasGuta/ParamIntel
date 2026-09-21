@@ -13,6 +13,7 @@ import (
 
 type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error)
 type SemanticValuePriority func(candidate model.Candidate) int
+type RescuePlanObserver func(eligibleCandidates, budget int)
 type RescueAuditObserver func(model.RescueCandidateAudit)
 
 type Config struct {
@@ -28,6 +29,7 @@ type Config struct {
 	ValueAwareBudget     int
 	SemanticValueAdvisor  SemanticValueAdvisor
 	SemanticValuePriority SemanticValuePriority
+	RescuePlanObserver    RescuePlanObserver
 	RescueAuditObserver   RescueAuditObserver
 	JSONScaffold          bool
 }
@@ -156,6 +158,9 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			eligible++
 		}
 
+		if cfg.RescuePlanObserver != nil {
+			cfg.RescuePlanObserver(eligible, cfg.ValueAwareBudget)
+		}
 		budget := newSemanticBudget(cfg.ValueAwareBudget)
 		e.verbosef("[*] Value-aware rescue\n")
 		e.verbosef("    eligible candidates: %d\n", eligible)
