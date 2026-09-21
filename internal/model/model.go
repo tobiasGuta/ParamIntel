@@ -223,6 +223,7 @@ type AIValueAdvisorSummary struct {
 	Provider           string `json:"provider"`
 	Model              string `json:"model"`
 	InputPolicy        string `json:"input_policy"`
+	ContextSource      string `json:"context_source"`
 	CandidateQueries   int    `json:"candidate_queries"`
 	SuggestedValues    int    `json:"suggested_values"`
 	AcceptedValues     int    `json:"accepted_values"`
