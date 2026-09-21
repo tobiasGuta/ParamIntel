@@ -23,7 +23,7 @@ func (p HeuristicPlanner) Plan(state State) Action {
 
 func (HeuristicPlanner) Decide(state State) HeuristicDecision {
 	if state.RemainingRequestBudget <= 0 {
-		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "stop rule matched"}
+		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "request budget exhausted"}
 	}
 
 	v := state.Verification
@@ -31,11 +31,11 @@ func (HeuristicPlanner) Decide(state State) HeuristicDecision {
 		v.CandidateChanged == v.CandidateTrials &&
 		v.ControlChanged == 0 &&
 		v.Confidence >= 0.90 {
-		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "stop rule matched"}
+		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "existing verification evidence is already sufficient"}
 	}
 
 	if v.ControlChanged > 0 {
-		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "stop rule matched"}
+		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "control changed; characterization signal is not clean"}
 	}
 
 	switch strings.ToLower(strings.TrimSpace(state.Candidate.ValueKind)) {
