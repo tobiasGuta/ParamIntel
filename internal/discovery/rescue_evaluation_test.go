@@ -107,7 +107,7 @@ func TestV011RescueEvaluationContextRelevanceUnderTightBudget(t *testing.T) {
 	if len(guided.Found) != 1 || guided.Found[0] != "format" {
 		t.Fatalf("guided failed to recover format: %+v", guided)
 	}
-	if legacy.MissRequests != 8 || guided.MissRequests != 0 || guided.VerifiedCost != 8 {
+	if legacy.RequestsUsed != 6 || legacy.MissRequests != 6 || guided.MissRequests != 0 || guided.VerifiedCost != 8 {
 		t.Fatalf("legacy=%+v guided=%+v", legacy, guided)
 	}
 	t.Logf("context relevance: legacy=%+v guided=%+v", legacy, guided)
@@ -132,7 +132,7 @@ func TestV011RescueEvaluationCostTieBreakerUnderTightBudget(t *testing.T) {
 	if len(guided.Found) != 1 || guided.Found[0] != "sort" {
 		t.Fatalf("guided failed to recover sort: %+v", guided)
 	}
-	if legacy.MissRequests != 8 || guided.VerifiedCost != 8 {
+	if legacy.RequestsUsed != 6 || legacy.MissRequests != 6 || guided.VerifiedCost != 8 {
 		t.Fatalf("legacy=%+v guided=%+v", legacy, guided)
 	}
 	t.Logf("cost tie-breaker: legacy=%+v guided=%+v", legacy, guided)
