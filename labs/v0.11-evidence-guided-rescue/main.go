@@ -54,9 +54,11 @@ func handleItems(w http.ResponseWriter, r *http.Request) {
 
 // /search validates the deterministic cost tie-breaker.
 //
-// debug and sort are both local semantic-profile candidates, but debug has four
-// screen values while sort has two. With equal evidence and an eight-request
-// budget, v0.11 should try sort first. Only sort=asc changes behavior.
+// The real CLI always includes ParamIntel's built-in candidates. order and sort
+// are the cheapest local semantic profiles at two values each; stable ordering
+// places order first. This scenario verifies that the cost-aware scheduler reaches
+// that cheapest tier before four-value candidates such as debug. Only order=asc
+// changes behavior.
 func handleSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -69,12 +71,12 @@ func handleSearch(w http.ResponseWriter, r *http.Request) {
 			{"id": 1, "name": "Alpha"},
 		},
 	}
-	if r.URL.Query().Get("sort") == "asc" {
+	if r.URL.Query().Get("order") == "asc" {
 		resp["results"] = []map[string]any{
 			{"id": 1, "name": "Alpha"},
 			{"id": 2, "name": "Beta"},
 		}
-		resp["sorted"] = true
+		resp["ordered"] = true
 	}
 	writeJSON(w, resp)
 }
