@@ -35,11 +35,17 @@ type caseResult struct {
 	JevModalAction          decision.Action `json:"jev_modal_action"`
 	JevModalRate            float64         `json:"jev_modal_rate"`
 	JevExpectedRate         float64         `json:"jev_expected_rate"`
+	JevAppliedModalAction   decision.Action `json:"jev_applied_modal_action"`
+	JevAppliedModalRate     float64         `json:"jev_applied_modal_rate"`
+	JevAppliedExpectedRate  float64         `json:"jev_applied_expected_rate"`
+	JevGatedRate            float64         `json:"jev_gated_rate"`
 	SelectedProbabilityMean float64         `json:"selected_probability_mean"`
 	DecisionMarginMean      float64         `json:"decision_margin_mean"`
 	LatencyMSMean           float64         `json:"latency_ms_mean"`
 	HybridAction            decision.Action `json:"hybrid_action"`
 	HybridExpectedRate      float64         `json:"hybrid_expected_rate"`
+	HybridAppliedAction     decision.Action `json:"hybrid_applied_action"`
+	HybridAppliedExpectedRate float64       `json:"hybrid_applied_expected_rate"`
 	HybridUsesJev           bool            `json:"hybrid_uses_jev"`
 }
 
@@ -52,11 +58,17 @@ type report struct {
 	HeuristicCoverage            float64      `json:"heuristic_coverage"`
 	HeuristicAccuracyWhenDecided float64      `json:"heuristic_accuracy_when_decided"`
 	JevExpectedDecisions         int          `json:"jev_expected_decisions"`
-	JevTotalDecisions      int          `json:"jev_total_decisions"`
+	JevAppliedExpectedDecisions  int          `json:"jev_applied_expected_decisions"`
+	JevTotalDecisions            int          `json:"jev_total_decisions"`
 	JevExpectedRate              float64      `json:"jev_expected_rate"`
+	JevAppliedExpectedRate       float64      `json:"jev_applied_expected_rate"`
+	JevGatedDecisions            int          `json:"jev_gated_decisions"`
+	JevGatedRate                 float64      `json:"jev_gated_rate"`
 	HybridExpectedDecisions      int          `json:"hybrid_expected_decisions"`
+	HybridAppliedExpectedDecisions int        `json:"hybrid_applied_expected_decisions"`
 	HybridTotalDecisions         int          `json:"hybrid_total_decisions"`
 	HybridExpectedRate           float64      `json:"hybrid_expected_rate"`
+	HybridAppliedExpectedRate    float64      `json:"hybrid_applied_expected_rate"`
 	HybridJevFallbackCalls       int          `json:"hybrid_jev_fallback_calls"`
 	HybridJevFallbackRate        float64      `json:"hybrid_jev_fallback_rate"`
 	CaseResults                  []caseResult `json:"case_results"`
@@ -107,8 +119,11 @@ func main() {
 	heuristicCorrect := 0
 	heuristicDecided := 0
 	jevExpected := 0
+	jevAppliedExpected := 0
+	jevGated := 0
 	jevTotal := 0
 	hybridExpected := 0
+	hybridAppliedExpected := 0
 	hybridTotal := 0
 	hybridJevCalls := 0
 
@@ -136,6 +151,7 @@ func main() {
 		}
 
 		counts := map[decision.Action]int{}
+		appliedCounts := map[decision.Action]int{}
 		var selectedProbabilitySum, marginSum float64
 		var latencySum int64
 
@@ -148,8 +164,15 @@ func main() {
 			latencySum += time.Since(started).Milliseconds()
 
 			counts[plan.SuggestedAction]++
+			appliedCounts[plan.AppliedAction]++
 			if plan.SuggestedAction == bc.ExpectedAction {
 				jevExpected++
+			}
+			if plan.AppliedAction == bc.ExpectedAction {
+				jevAppliedExpected++
+			}
+			if plan.Gated {
+				jevGated++
 			}
 			jevTotal++
 			selectedProbabilitySum += plan.SelectedProbability
@@ -167,21 +190,31 @@ func main() {
 		}
 
 		modalAction, modalCount := modal(counts)
+		appliedModalAction, appliedModalCount := modal(appliedCounts)
 		jevExpectedRate := float64(counts[bc.ExpectedAction]) / float64(runs)
+		jevAppliedExpectedRate := float64(appliedCounts[bc.ExpectedAction]) / float64(runs)
+		jevGatedRate := float64(runs-appliedCounts[modalAction]) / float64(runs)
 		hybridAction := modalAction
 		hybridExpectedRate := jevExpectedRate
+		hybridAppliedAction := appliedModalAction
+		hybridAppliedExpectedRate := jevAppliedExpectedRate
 		hybridUsesJev := true
 		if hDecision.Decided {
 			hybridAction = hAction
 			hybridUsesJev = false
 			if hAction == bc.ExpectedAction {
 				hybridExpectedRate = 1
+				hybridAppliedExpectedRate = 1
 				hybridExpected += runs
+				hybridAppliedExpected += runs
 			} else {
 				hybridExpectedRate = 0
+				hybridAppliedExpectedRate = 0
 			}
+			hybridAppliedAction = hAction
 		} else {
 			hybridExpected += counts[bc.ExpectedAction]
+			hybridAppliedExpected += appliedCounts[bc.ExpectedAction]
 			hybridJevCalls += runs
 		}
 		hybridTotal += runs
@@ -196,11 +229,17 @@ func main() {
 			JevModalAction:          modalAction,
 			JevModalRate:            float64(modalCount) / float64(runs),
 			JevExpectedRate:         jevExpectedRate,
+			JevAppliedModalAction:   appliedModalAction,
+			JevAppliedModalRate:     float64(appliedModalCount) / float64(runs),
+			JevAppliedExpectedRate:  jevAppliedExpectedRate,
+			JevGatedRate:            jevGatedRate,
 			SelectedProbabilityMean: selectedProbabilitySum / float64(runs),
 			DecisionMarginMean:      marginSum / float64(runs),
 			LatencyMSMean:           float64(latencySum) / float64(runs),
 			HybridAction:            hybridAction,
 			HybridExpectedRate:      hybridExpectedRate,
+			HybridAppliedAction:     hybridAppliedAction,
+			HybridAppliedExpectedRate: hybridAppliedExpectedRate,
 			HybridUsesJev:           hybridUsesJev,
 		})
 	}
@@ -220,11 +259,17 @@ func main() {
 		HeuristicCoverage:            float64(heuristicDecided) / float64(len(m.Cases)),
 		HeuristicAccuracyWhenDecided: heuristicAccuracyWhenDecided,
 		JevExpectedDecisions:         jevExpected,
+		JevAppliedExpectedDecisions:  jevAppliedExpected,
 		JevTotalDecisions:            jevTotal,
 		JevExpectedRate:              float64(jevExpected) / float64(jevTotal),
+		JevAppliedExpectedRate:       float64(jevAppliedExpected) / float64(jevTotal),
+		JevGatedDecisions:            jevGated,
+		JevGatedRate:                 float64(jevGated) / float64(jevTotal),
 		HybridExpectedDecisions:      hybridExpected,
+		HybridAppliedExpectedDecisions: hybridAppliedExpected,
 		HybridTotalDecisions:         hybridTotal,
 		HybridExpectedRate:           float64(hybridExpected) / float64(hybridTotal),
+		HybridAppliedExpectedRate:    float64(hybridAppliedExpected) / float64(hybridTotal),
 		HybridJevFallbackCalls:       hybridJevCalls,
 		HybridJevFallbackRate:        float64(hybridJevCalls) / float64(hybridTotal),
 		CaseResults:                  results,
