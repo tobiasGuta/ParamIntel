@@ -69,8 +69,8 @@ func main() {
 	flag.IntVar(&aiValueCandidateBudget, "ai-value-candidate-budget", 8, "maximum candidates submitted to the AI Semantic Value Advisor")
 	flag.DurationVar(&aiTimeout, "ai-timeout", defaultAIProviderTimeout, "AI provider request timeout")
 
-	flag.StringVar(&decisionShadowCapturePath, "decision-shadow-capture", "", "optional local JSONL path for sanitized pre-characterization decision states; does not call a decision provider or alter scan behavior")
-	flag.IntVar(&decisionShadowBudget, "decision-shadow-budget", 0, "hypothetical remaining characterization request budget stored in shadow decision states; required with -decision-shadow-capture")
+	flag.StringVar(&decisionShadowCapturePath, "decision-shadow-capture", "", "optional local JSONL path for sanitized residual states before semantic rescue; does not call a decision provider or alter scan behavior")
+	flag.IntVar(&decisionShadowBudget, "decision-shadow-budget", 0, "maximum remaining planner request budget stored in shadow decision states; required with -decision-shadow-capture")
 
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.Parse()
@@ -297,15 +297,19 @@ func main() {
 		}
 	}
 
-	var decisionShadowObserver discovery.VerifiedParameterObserver
+	var decisionShadowObserver discovery.ResidualDecisionObserver
 	var decisionShadowCaptureErr error
 	decisionShadowCaptured := 0
 	if strings.TrimSpace(decisionShadowCapturePath) != "" {
-		decisionShadowObserver = func(result model.ParameterResult) {
+		decisionShadowObserver = func(result model.ParameterResult, remainingBudget int) {
 			if decisionShadowCaptureErr != nil {
 				return
 			}
-			state := decision.StateFromParameterResult(result, decisionShadowBudget)
+			effectiveBudget := remainingBudget
+			if effectiveBudget > decisionShadowBudget {
+				effectiveBudget = decisionShadowBudget
+			}
+			state := decision.StateFromParameterResult(result, effectiveBudget)
 			if err := decision.AppendShadowCaptureJSONL(decisionShadowCapturePath, state); err != nil {
 				decisionShadowCaptureErr = err
 				fmt.Fprintf(os.Stderr, "warning: decision shadow capture disabled after write failure: %v\n", err)
@@ -328,14 +332,14 @@ func main() {
 		ValueAwareBudget:     valueAwareBudget,
 		SemanticValueAdvisor:      semanticValueAdvisor,
 		SemanticValuePriority:     semanticValuePriority,
-		VerifiedParameterObserver: decisionShadowObserver,
+		ResidualDecisionObserver: decisionShadowObserver,
 		JSONScaffold:              jsonScaffold,
 	}}
 	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
 	fatal(err)
 	if strings.TrimSpace(decisionShadowCapturePath) != "" && verbose {
 		fmt.Printf("[*] Decision shadow capture\n")
-		fmt.Printf("    policy: sanitized pre-characterization state only\n")
+		fmt.Printf("    policy: sanitized residual pre-semantic-rescue state only\n")
 		fmt.Printf("    provider calls: 0\n")
 		fmt.Printf("    captured records: %d\n", decisionShadowCaptured)
 		fmt.Printf("    output: %s\n", decisionShadowCapturePath)
