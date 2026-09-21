@@ -67,7 +67,7 @@ func TestStateFromParameterResultDefaultsGenericProbeKindToString(t *testing.T) 
 }
 
 func TestAppendShadowCaptureJSONLWritesSanitizedRecord(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "shadow.jsonl")
+	path := filepath.Join(t.TempDir(), ".paramintel", "shadow.jsonl")
 	state := State{
 		Candidate: CandidateState{Name: "sandbox", Location: "query", ValueKind: "string"},
 		Verification: VerificationState{
