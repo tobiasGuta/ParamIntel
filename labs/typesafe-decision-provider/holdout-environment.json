@@ -1,0 +1,6 @@
+{
+  "candidate": {"name":"environment","location":"query","discovery_mode":"","value_kind":"string"},
+  "verification": {"candidate_changed":0,"candidate_trials":3,"control_changed":0,"control_trials":3,"confidence":0.0},
+  "evidence": {"kinds":["json_path_added"],"paths":["$.constraints.environment_case_sensitive"]},
+  "remaining_request_budget":18
+}
