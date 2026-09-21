@@ -93,6 +93,12 @@ func AppendShadowCaptureJSONL(path string, state State) error {
 	if path == "." || path == "" {
 		return fmt.Errorf("shadow capture path is required")
 	}
+	dir := filepath.Dir(path)
+	if dir != "." {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return fmt.Errorf("create shadow capture directory: %w", err)
+		}
+	}
 	record, err := NewShadowCaptureRecord(state)
 	if err != nil {
 		return err
