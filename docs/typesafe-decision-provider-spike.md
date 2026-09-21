@@ -220,3 +220,31 @@ stop probability: 0.11
 This exposed an important spike-design correction: TypeSafe reports the winning label's probability separately from an overall confidence metric. The local gate now uses the selected label's probability as the action threshold, while retaining overall confidence for audit.
 
 These two cases are encouraging but are not sufficient for production graduation.
+
+
+## Stability sampling
+
+Single Jev calls are not enough to choose a production threshold. The first enum fixture returned the same `enum_profile` decision twice, but the selected probability moved from about `0.80` to `0.77`.
+
+Use the stability evaluator before changing the gate:
+
+```powershell
+go run .\cmd\decision-stability `
+  -state .\labs\typesafe-decision-provider\state-enum.json `
+  -runs 10 `
+  -min-choice-probability 0.80
+```
+
+The evaluator records:
+
+- suggested action for every run;
+- applied action after the local gate;
+- selected action probability;
+- overall Jev choice confidence;
+- gate rate;
+- STOP rate;
+- modal action and modal rate;
+- min/mean/max selected probability;
+- min/mean/max latency.
+
+The goal is to distinguish **ranking stability** from **probability calibration**. If Jev repeatedly chooses the same correct action while the numeric probability fluctuates around a threshold, ParamIntel should not simply tune the threshold to the last observed run. The eventual gate should be selected from the benchmark distribution, not from one sample.
