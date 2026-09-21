@@ -57,7 +57,7 @@ func TestEvidenceGuidedRescueStopsBeforeUnverifiableTail(t *testing.T) {
 	if audit.RequestsUsed != 1 || audit.BudgetBefore != 8 || audit.BudgetAfter != 7 {
 		t.Fatalf("unexpected budget accounting: %+v", audit)
 	}
-	if audit.Outcome != "budget_exhausted" {
-		t.Fatalf("outcome=%q want=budget_exhausted audit=%+v", audit.Outcome, audit)
+	if audit.Outcome != "verification_budget_insufficient" {
+		t.Fatalf("outcome=%q want=verification_budget_insufficient audit=%+v", audit.Outcome, audit)
 	}
 }
