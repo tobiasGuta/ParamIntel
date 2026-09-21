@@ -20,7 +20,7 @@ func (p HybridPlanner) PlanNext(ctx context.Context, state State) (Plan, error) 
 			Provider:        "deterministic",
 			Model:           "heuristic",
 			Gated:           false,
-			GateReason:      local.Reason,
+			DecisionReason:  local.Reason,
 		}, nil
 	}
 
@@ -32,6 +32,7 @@ func (p HybridPlanner) PlanNext(ctx context.Context, state State) (Plan, error) 
 			Model:           "fail-closed",
 			Gated:           true,
 			GateReason:      "decision provider unavailable after deterministic abstain",
+			DecisionReason:  "deterministic planner abstained and no provider was available",
 		}, nil
 	}
 
@@ -44,6 +45,7 @@ func (p HybridPlanner) PlanNext(ctx context.Context, state State) (Plan, error) 
 			Model:           p.Provider.Model(),
 			Gated:           true,
 			GateReason:      "decision provider failed closed",
+			DecisionReason:  "deterministic planner abstained and provider failed",
 		}, nil
 	}
 
