@@ -15,11 +15,11 @@ import (
 
 func main() {
 	var statePath, model string
-	var minConfidence float64
+	var minChoiceProbability float64
 	var timeout time.Duration
 	flag.StringVar(&statePath, "state", "", "sanitized decision-state JSON file")
 	flag.StringVar(&model, "model", decision.DefaultTypeSafeModel, "TypeSafe model")
-	flag.Float64Var(&minConfidence, "min-confidence", decision.DefaultMinConfidence, "minimum confidence required to apply a non-STOP decision")
+	flag.Float64Var(&minChoiceProbability, "min-choice-probability", decision.DefaultMinChoiceProbability, "minimum selected-action probability required to apply a non-STOP decision")
 	flag.DurationVar(&timeout, "timeout", 10*time.Second, "TypeSafe API timeout")
 	flag.Parse()
 
@@ -48,8 +48,8 @@ func main() {
 	fatal(err)
 
 	plan, err := (decision.Planner{
-		Provider:      provider,
-		MinConfidence: minConfidence,
+		Provider:             provider,
+		MinChoiceProbability: minChoiceProbability,
 	}).PlanNext(context.Background(), state)
 	fatal(err)
 
