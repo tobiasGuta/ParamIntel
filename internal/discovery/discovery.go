@@ -163,6 +163,9 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			cfg.RescuePlanObserver(eligible, cfg.ValueAwareBudget)
 		}
 		budget := newSemanticBudget(cfg.ValueAwareBudget)
+		if cfg.EvidenceGuidedRescue {
+			budget.requireVerifiableAttempt(cfg.Trials)
+		}
 		e.verbosef("[*] Value-aware rescue\n")
 		e.verbosef("    eligible candidates: %d\n", eligible)
 		e.verbosef("    semantic probe budget: %d requests\n", cfg.ValueAwareBudget)
