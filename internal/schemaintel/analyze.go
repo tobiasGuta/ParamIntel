@@ -1,6 +1,7 @@
 package schemaintel
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,16 +36,22 @@ func Analyze(doc *Document, tmpl model.RequestTemplate, baseline model.BaselineP
 	if err != nil {
 		return Report{}, err
 	}
-	if op.RequestBody == nil {
-		return Report{}, fmt.Errorf("%w: operation has no request body", ErrMediaTypeNotFound)
-	}
-
-	requestMedia, requestMediaKey, err := selectMediaType(op.RequestBody.Content, tmpl.Headers.Get("Content-Type"))
-	if err != nil {
-		return Report{}, fmt.Errorf("select request schema: %w", err)
-	}
-	if requestMedia.Schema == nil {
-		return Report{}, fmt.Errorf("select request schema: media type %s has no schema", requestMediaKey)
+	var requestMediaKey string
+	requestProperties := map[string]PropertyDescriptor{}
+	var requestSkipped []SkippedDescriptor
+	if op.RequestBody != nil {
+		requestMedia, selectedRequestMediaKey, err := selectMediaType(op.RequestBody.Content, tmpl.Headers.Get("Content-Type"))
+		if err != nil {
+			return Report{}, fmt.Errorf("select request schema: %w", err)
+		}
+		if requestMedia.Schema == nil {
+			return Report{}, fmt.Errorf("select request schema: media type %s has no schema", selectedRequestMediaKey)
+		}
+		requestMediaKey = selectedRequestMediaKey
+		requestProperties, requestSkipped, err = flattenSchema(requestMedia.Schema, cfg)
+		if err != nil {
+			return Report{}, fmt.Errorf("walk request schema: %w", err)
+		}
 	}
 
 	response, responseStatusKey, err := selectResponse(op.Responses, baseline.StatusCode)
@@ -59,18 +66,20 @@ func Analyze(doc *Document, tmpl model.RequestTemplate, baseline model.BaselineP
 		return Report{}, fmt.Errorf("select response schema: media type %s has no schema", responseMediaKey)
 	}
 
-	requestProperties, requestSkipped, err := flattenSchema(requestMedia.Schema, cfg)
-	if err != nil {
-		return Report{}, fmt.Errorf("walk request schema: %w", err)
-	}
 	responseProperties, responseSkipped, err := flattenSchema(responseMedia.Schema, cfg)
 	if err != nil {
 		return Report{}, fmt.Errorf("walk response schema: %w", err)
 	}
 
-	actualProperties, actualObjects, err := collectActualJSON(tmpl.Body)
-	if err != nil {
-		return Report{}, err
+	actualProperties := map[string]bool{}
+	actualObjects := map[string]bool{}
+	hasCapturedJSONObject := false
+	if len(bytes.TrimSpace(tmpl.Body)) > 0 {
+		actualProperties, actualObjects, err = collectActualJSON(tmpl.Body)
+		if err != nil {
+			return Report{}, err
+		}
+		hasCapturedJSONObject = true
 	}
 
 	report := Report{
@@ -103,6 +112,13 @@ func Analyze(doc *Document, tmpl model.RequestTemplate, baseline model.BaselineP
 		if property.Object {
 			// Object containers are useful placement context for descendants, but
 			// the current ParamIntel mutation model does not probe whole objects.
+			continue
+		}
+		if !hasCapturedJSONObject {
+			report.Skipped = append(report.Skipped, SkippedDescriptor{
+				Path:   property.Path,
+				Reason: "captured request has no JSON object body; response-only schema property is informational only",
+			})
 			continue
 		}
 
