@@ -7,9 +7,23 @@ import (
 
 type HeuristicPlanner struct{}
 
-func (HeuristicPlanner) Plan(state State) Action {
+type HeuristicDecision struct {
+	Action  Action
+	Decided bool
+	Reason  string
+}
+
+func (p HeuristicPlanner) Plan(state State) Action {
+	decision := p.Decide(state)
+	if !decision.Decided {
+		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "stop rule matched"}
+	}
+	return decision.Action
+}
+
+func (HeuristicPlanner) Decide(state State) HeuristicDecision {
 	if state.RemainingRequestBudget <= 0 {
-		return ActionStop
+		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "stop rule matched"}
 	}
 
 	v := state.Verification
@@ -17,18 +31,18 @@ func (HeuristicPlanner) Plan(state State) Action {
 		v.CandidateChanged == v.CandidateTrials &&
 		v.ControlChanged == 0 &&
 		v.Confidence >= 0.90 {
-		return ActionStop
+		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "stop rule matched"}
 	}
 
 	if v.ControlChanged > 0 {
-		return ActionStop
+		return HeuristicDecision{Action: ActionStop, Decided: true, Reason: "stop rule matched"}
 	}
 
 	switch strings.ToLower(strings.TrimSpace(state.Candidate.ValueKind)) {
 	case "boolean", "bool":
-		return ActionBooleanProfile
+		return HeuristicDecision{Action: ActionBooleanProfile, Decided: true, Reason: "boolean rule matched"}
 	case "integer", "int":
-		return ActionIntegerBoundaryProfile
+		return HeuristicDecision{Action: ActionIntegerBoundaryProfile, Decided: true, Reason: "integer rule matched"}
 	}
 
 	nameTokens := semanticTokens(state.Candidate.Name)
@@ -41,20 +55,20 @@ func (HeuristicPlanner) Plan(state State) Action {
 
 	if hasAnyToken(nameTokens, "status", "state", "mode", "visibility", "role", "type", "format", "tier", "phase", "channel", "variant", "scope") {
 		if hasAnyTokenMap(pathTokens, "allowed", "available", "supported", "valid", "possible", "statuses", "states", "modes", "visibilities", "roles", "types", "formats", "tiers", "phases", "channels", "variants", "scopes") {
-			return ActionEnumProfile
+			return HeuristicDecision{Action: ActionEnumProfile, Decided: true, Reason: "enum rule matched"}
 		}
-		return ActionRelatedValueProfile
+		return HeuristicDecision{Action: ActionRelatedValueProfile, Decided: true, Reason: "related-value rule matched"}
 	}
 
 	if hasAnyToken(nameTokens, "enabled", "disabled", "include", "exclude", "active", "preview", "archived", "deleted") {
-		return ActionBooleanProfile
+		return HeuristicDecision{Action: ActionBooleanProfile, Decided: true, Reason: "boolean rule matched"}
 	}
 
 	if hasAnyToken(nameTokens, "limit", "count", "size", "offset", "page", "window", "batch", "depth", "level") {
-		return ActionIntegerBoundaryProfile
+		return HeuristicDecision{Action: ActionIntegerBoundaryProfile, Decided: true, Reason: "integer rule matched"}
 	}
 
-	return ActionStop
+	return HeuristicDecision{Action: ActionStop, Decided: false, Reason: "no deterministic rule matched"}
 }
 
 func semanticTokens(s string) []string {
