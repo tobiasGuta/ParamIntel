@@ -359,6 +359,43 @@ func TestResidualDecisionObserverFiresBeforeSemanticRescue(t *testing.T) {
 	}
 }
 
+func TestResidualDecisionObserverSkipsCandidatesThatCannotReachSemanticRescue(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	tmpl := model.RequestTemplate{Method: "GET", URL: srv.URL, Headers: make(http.Header)}
+	p, err := baseline.Build(context.Background(), srv.Client(), tmpl, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var names []string
+	e := Engine{Client: srv.Client(), Config: Config{
+		ChunkSize:        1,
+		Trials:           3,
+		MinConfidence:    .60,
+		ValueAware:       true,
+		ValueAwareBudget: 16,
+		ResidualDecisionObserver: func(result model.ParameterResult, remainingBudget int) {
+			names = append(names, result.Name)
+		},
+	}}
+
+	results, err := e.Scan(context.Background(), tmpl, p, []string{"format", "mystery_parameter"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("results=%+v", results)
+	}
+	if len(names) != 1 || names[0] != "format" {
+		t.Fatalf("captured residuals=%v want=[format]", names)
+	}
+}
+
 func TestResidualDecisionObserverDoesNotCaptureAlreadyVerifiedFinding(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
