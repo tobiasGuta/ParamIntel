@@ -54,7 +54,7 @@ func main() {
 	var runs int
 	var timeout time.Duration
 
-	flag.StringVar(&manifestPath, "manifest", ".\labs\typesafe-decision-provider\benchmark.json", "benchmark manifest")
+	flag.StringVar(&manifestPath, "manifest", `./labs/typesafe-decision-provider/benchmark.json`, "benchmark manifest")
 	flag.StringVar(&model, "model", decision.DefaultTypeSafeModel, "TypeSafe model")
 	flag.IntVar(&runs, "runs", 5, "Jev runs per case (1-20)")
 	flag.DurationVar(&timeout, "timeout", 10*time.Second, "TypeSafe API timeout per run")
