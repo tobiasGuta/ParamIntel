@@ -14,7 +14,7 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 )
 
-const ShadowCaptureSchemaVersion = 2
+const ShadowCaptureSchemaVersion = 3
 
 type ShadowCaptureRecord struct {
 	SchemaVersion int    `json:"schema_version"`
