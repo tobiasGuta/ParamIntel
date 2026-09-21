@@ -154,6 +154,7 @@ func main() {
 		appliedCounts := map[decision.Action]int{}
 		var selectedProbabilitySum, marginSum float64
 		var latencySum int64
+		caseGated := 0
 
 		for i := 0; i < runs; i++ {
 			started := time.Now()
@@ -173,6 +174,7 @@ func main() {
 			}
 			if plan.Gated {
 				jevGated++
+				caseGated++
 			}
 			jevTotal++
 			selectedProbabilitySum += plan.SelectedProbability
@@ -193,7 +195,7 @@ func main() {
 		appliedModalAction, appliedModalCount := modal(appliedCounts)
 		jevExpectedRate := float64(counts[bc.ExpectedAction]) / float64(runs)
 		jevAppliedExpectedRate := float64(appliedCounts[bc.ExpectedAction]) / float64(runs)
-		jevGatedRate := float64(runs-appliedCounts[modalAction]) / float64(runs)
+		jevGatedRate := float64(caseGated) / float64(runs)
 		hybridAction := modalAction
 		hybridExpectedRate := jevExpectedRate
 		hybridAppliedAction := appliedModalAction
