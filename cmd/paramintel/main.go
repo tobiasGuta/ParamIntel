@@ -201,9 +201,11 @@ func main() {
 	var aiSummary *model.AIAdvisorSummary
 	var aiValueSummary *model.AIValueAdvisorSummary
 	var advisorInput aiadvisor.Input
+	var aiContextRaw []byte
 	var aiContextSource string
 	if aiAdvisorEnabled || aiValueAdvisorEnabled {
 		aiRaw, source := selectAIContext(baselineSnapshot, aiOverrideRaw, aiContextResponsePath != "")
+		aiContextRaw = aiRaw
 		aiContextSource = source
 		advisorInput, err = aiadvisor.BuildInput(tmpl, aiRaw, locations, jsonDepth)
 		fatal(err)
@@ -234,11 +236,12 @@ func main() {
 	}
 
 	var semanticValueAdvisor discovery.SemanticValueAdvisor
+	var semanticValuePriority discovery.SemanticValuePriority
 	if aiValueAdvisorEnabled {
 		aiValueSummary = &model.AIValueAdvisorSummary{
 			Provider:      aiProvider.Name(),
 			Model:         aiProvider.Model(),
-			InputPolicy:   "sanitized structure and candidate metadata only",
+			InputPolicy:   "sanitized structure, candidate metadata, and bounded enum-like semantic hints",
 			ContextSource: aiContextSource,
 		}
 		remainingCandidates := aiValueCandidateBudget
@@ -251,13 +254,15 @@ func main() {
 			for _, value := range deterministic {
 				excluded = append(excluded, aiadvisor.ValueIdentity{Kind: value.Kind, Raw: value.Raw})
 			}
+			valueCandidate := aiadvisor.ValueCandidate{
+				Name:       candidate.Name,
+				Location:   candidate.Location,
+				JSONParent: candidate.JSONParent,
+			}
 			valueInput := aiadvisor.ValueInput{
-				Application: advisorInput,
-				Candidate: aiadvisor.ValueCandidate{
-					Name:       candidate.Name,
-					Location:   candidate.Location,
-					JSONParent: candidate.JSONParent,
-				},
+				Application:    advisorInput,
+				Candidate:      valueCandidate,
+				SemanticHints:  aiadvisor.BuildSemanticValueHints(aiContextRaw, valueCandidate, 12),
 				ExcludedValues: excluded,
 			}
 			result, err := aiadvisor.GenerateValues(ctx, aiProvider, valueInput, aiValueBudget)
@@ -269,10 +274,19 @@ func main() {
 			aiValueSummary.AcceptedValues += result.AcceptedCount
 			if verbose {
 				fmt.Printf("[*] AI Semantic Value Advisor: %s (%s)\n", candidate.Name, candidate.Location)
+				fmt.Printf("    local relevance: %d\n", aiadvisor.ValueCandidateRelevance(advisorInput, valueCandidate))
+				fmt.Printf("    semantic hints: %d\n", len(valueInput.SemanticHints))
 				fmt.Printf("    suggested values: %d\n", result.SuggestedCount)
 				fmt.Printf("    accepted value hypotheses: %d\n", result.AcceptedCount)
 			}
 			return result.Values, nil
+		}
+		semanticValuePriority = func(candidate model.Candidate) int {
+			return aiadvisor.ValueCandidateRelevance(advisorInput, aiadvisor.ValueCandidate{
+				Name:       candidate.Name,
+				Location:   candidate.Location,
+				JSONParent: candidate.JSONParent,
+			})
 		}
 	}
 
@@ -287,8 +301,9 @@ func main() {
 		Characterize:     characterize,
 		ValueAware:       valueAware,
 		ValueAwareBudget:     valueAwareBudget,
-		SemanticValueAdvisor: semanticValueAdvisor,
-		JSONScaffold:         jsonScaffold,
+		SemanticValueAdvisor:  semanticValueAdvisor,
+		SemanticValuePriority: semanticValuePriority,
+		JSONScaffold:          jsonScaffold,
 	}}
 	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
 	fatal(err)
