@@ -46,6 +46,8 @@ normal ParamIntel confidence
 
 If a deterministic semantic value already verifies the candidate, the AI advisor is never called.
 
+When AI candidate queries are scarce, ParamIntel ranks clean-miss candidates using local structural relevance before spending the provider budget. A candidate such as `visibility` is therefore prioritized when the sanitized response contains structurally related keys such as `available_visibilities`, instead of blindly consuming the first AI call on an unrelated built-in candidate.
+
 ## CLI
 
 The advisor is disabled by default.
@@ -78,7 +80,8 @@ The provider receives the same sanitized application structure used by the Candi
 - candidate name;
 - candidate location;
 - JSON parent path when relevant;
-- deterministic semantic values already covered locally, so the provider can avoid repeating them.
+- deterministic semantic values already covered locally, so the provider can avoid repeating them;
+- a bounded set of locally filtered enum-like response tokens when they come from structurally relevant fields such as `available_visibilities`, `allowed_statuses`, or `supported_modes`.
 
 The provider does not receive:
 
@@ -87,6 +90,7 @@ The provider does not receive:
 - hostnames;
 - query or form values from the captured request;
 - primitive JSON values from the captured request;
+- arbitrary primitive response values;
 - raw response text;
 - credentials or tokens.
 
@@ -109,6 +113,8 @@ The local admission gate rejects:
 - duplicates;
 - values already covered by deterministic profiles;
 - suggestions beyond the configured value budget.
+
+The semantic-hint extractor only admits short safe tokens from enum-like arrays. It rejects unrelated values and payload-like syntax before provider input is built.
 
 The provider instruction explicitly excludes exploit payload generation. The feature is for ordinary application-domain semantics such as:
 
