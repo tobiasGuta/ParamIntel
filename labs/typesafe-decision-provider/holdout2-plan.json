@@ -1,0 +1,1 @@
+{"candidate":{"name":"plan","location":"query","discovery_mode":"","value_kind":"string"},"verification":{"candidate_changed":0,"candidate_trials":3,"control_changed":0,"control_trials":3,"confidence":0},"evidence":{"kinds":["json_path_added"],"paths":["$.catalog.plan_codes"]},"remaining_request_budget":18}
