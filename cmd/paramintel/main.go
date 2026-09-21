@@ -351,8 +351,14 @@ func main() {
 		}
 		for _, audit := range rescueAudits {
 			valueAwareSummary.RequestsUsed += audit.RequestsUsed
-			if audit.Outcome == "verified" {
+			switch audit.Outcome {
+			case "verified":
 				valueAwareSummary.VerifiedParameters++
+				valueAwareSummary.VerifiedRequests += audit.RequestsUsed
+			case "miss":
+				valueAwareSummary.MissRequests += audit.RequestsUsed
+			case "budget_exhausted":
+				valueAwareSummary.BudgetExhaustedRequests += audit.RequestsUsed
 			}
 		}
 	}
