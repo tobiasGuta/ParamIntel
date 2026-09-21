@@ -29,6 +29,8 @@ type caseResult struct {
 	Name                    string          `json:"name"`
 	ExpectedAction          decision.Action `json:"expected_action"`
 	HeuristicAction         decision.Action `json:"heuristic_action"`
+	HeuristicDecided        bool            `json:"heuristic_decided"`
+	HeuristicReason         string          `json:"heuristic_reason"`
 	HeuristicCorrect        bool            `json:"heuristic_correct"`
 	JevModalAction          decision.Action `json:"jev_modal_action"`
 	JevModalRate            float64         `json:"jev_modal_rate"`
@@ -36,17 +38,28 @@ type caseResult struct {
 	SelectedProbabilityMean float64         `json:"selected_probability_mean"`
 	DecisionMarginMean      float64         `json:"decision_margin_mean"`
 	LatencyMSMean           float64         `json:"latency_ms_mean"`
+	HybridAction            decision.Action `json:"hybrid_action"`
+	HybridExpectedRate      float64         `json:"hybrid_expected_rate"`
+	HybridUsesJev           bool            `json:"hybrid_uses_jev"`
 }
 
 type report struct {
 	Cases                  int          `json:"cases"`
 	JevRunsPerCase         int          `json:"jev_runs_per_case"`
-	HeuristicCorrectCases  int          `json:"heuristic_correct_cases"`
-	HeuristicAccuracy      float64      `json:"heuristic_accuracy"`
-	JevExpectedDecisions   int          `json:"jev_expected_decisions"`
+	HeuristicCorrectCases        int          `json:"heuristic_correct_cases"`
+	HeuristicAccuracy            float64      `json:"heuristic_accuracy"`
+	HeuristicDecidedCases        int          `json:"heuristic_decided_cases"`
+	HeuristicCoverage            float64      `json:"heuristic_coverage"`
+	HeuristicAccuracyWhenDecided float64      `json:"heuristic_accuracy_when_decided"`
+	JevExpectedDecisions         int          `json:"jev_expected_decisions"`
 	JevTotalDecisions      int          `json:"jev_total_decisions"`
-	JevExpectedRate        float64      `json:"jev_expected_rate"`
-	CaseResults            []caseResult `json:"case_results"`
+	JevExpectedRate              float64      `json:"jev_expected_rate"`
+	HybridExpectedDecisions      int          `json:"hybrid_expected_decisions"`
+	HybridTotalDecisions         int          `json:"hybrid_total_decisions"`
+	HybridExpectedRate           float64      `json:"hybrid_expected_rate"`
+	HybridJevFallbackCalls       int          `json:"hybrid_jev_fallback_calls"`
+	HybridJevFallbackRate        float64      `json:"hybrid_jev_fallback_rate"`
+	CaseResults                  []caseResult `json:"case_results"`
 }
 
 func main() {
@@ -92,8 +105,12 @@ func main() {
 
 	results := make([]caseResult, 0, len(m.Cases))
 	heuristicCorrect := 0
+	heuristicDecided := 0
 	jevExpected := 0
 	jevTotal := 0
+	hybridExpected := 0
+	hybridTotal := 0
+	hybridJevCalls := 0
 
 	for _, bc := range m.Cases {
 		stateRaw, err := os.ReadFile(filepath.Clean(bc.StatePath))
@@ -108,8 +125,12 @@ func main() {
 			fatal(fmt.Errorf("%s: decode state: %w", bc.Name, err))
 		}
 
-		hAction := heuristic.Plan(state)
-		hCorrect := hAction == bc.ExpectedAction
+		hDecision := heuristic.Decide(state)
+		hAction := hDecision.Action
+		hCorrect := hDecision.Decided && hAction == bc.ExpectedAction
+		if hDecision.Decided {
+			heuristicDecided++
+		}
 		if hCorrect {
 			heuristicCorrect++
 		}
@@ -146,31 +167,67 @@ func main() {
 		}
 
 		modalAction, modalCount := modal(counts)
+		jevExpectedRate := float64(counts[bc.ExpectedAction]) / float64(runs)
+		hybridAction := modalAction
+		hybridExpectedRate := jevExpectedRate
+		hybridUsesJev := true
+		if hDecision.Decided {
+			hybridAction = hAction
+			hybridUsesJev = false
+			if hAction == bc.ExpectedAction {
+				hybridExpectedRate = 1
+				hybridExpected += runs
+			} else {
+				hybridExpectedRate = 0
+			}
+		} else {
+			hybridExpected += counts[bc.ExpectedAction]
+			hybridJevCalls += runs
+		}
+		hybridTotal += runs
+
 		results = append(results, caseResult{
 			Name:                    bc.Name,
 			ExpectedAction:          bc.ExpectedAction,
 			HeuristicAction:         hAction,
+			HeuristicDecided:        hDecision.Decided,
+			HeuristicReason:         hDecision.Reason,
 			HeuristicCorrect:        hCorrect,
 			JevModalAction:          modalAction,
 			JevModalRate:            float64(modalCount) / float64(runs),
-			JevExpectedRate:         float64(counts[bc.ExpectedAction]) / float64(runs),
+			JevExpectedRate:         jevExpectedRate,
 			SelectedProbabilityMean: selectedProbabilitySum / float64(runs),
 			DecisionMarginMean:      marginSum / float64(runs),
 			LatencyMSMean:           float64(latencySum) / float64(runs),
+			HybridAction:            hybridAction,
+			HybridExpectedRate:      hybridExpectedRate,
+			HybridUsesJev:           hybridUsesJev,
 		})
 	}
 
 	sort.Slice(results, func(i, j int) bool { return results[i].Name < results[j].Name })
 
+	heuristicAccuracyWhenDecided := 0.0
+	if heuristicDecided > 0 {
+		heuristicAccuracyWhenDecided = float64(heuristicCorrect) / float64(heuristicDecided)
+	}
 	out := report{
-		Cases:                 len(m.Cases),
-		JevRunsPerCase:        runs,
-		HeuristicCorrectCases: heuristicCorrect,
-		HeuristicAccuracy:     float64(heuristicCorrect) / float64(len(m.Cases)),
-		JevExpectedDecisions:  jevExpected,
-		JevTotalDecisions:     jevTotal,
-		JevExpectedRate:       float64(jevExpected) / float64(jevTotal),
-		CaseResults:           results,
+		Cases:                        len(m.Cases),
+		JevRunsPerCase:               runs,
+		HeuristicCorrectCases:        heuristicCorrect,
+		HeuristicAccuracy:            float64(heuristicCorrect) / float64(len(m.Cases)),
+		HeuristicDecidedCases:        heuristicDecided,
+		HeuristicCoverage:            float64(heuristicDecided) / float64(len(m.Cases)),
+		HeuristicAccuracyWhenDecided: heuristicAccuracyWhenDecided,
+		JevExpectedDecisions:         jevExpected,
+		JevTotalDecisions:            jevTotal,
+		JevExpectedRate:              float64(jevExpected) / float64(jevTotal),
+		HybridExpectedDecisions:      hybridExpected,
+		HybridTotalDecisions:         hybridTotal,
+		HybridExpectedRate:           float64(hybridExpected) / float64(hybridTotal),
+		HybridJevFallbackCalls:       hybridJevCalls,
+		HybridJevFallbackRate:        float64(hybridJevCalls) / float64(hybridTotal),
+		CaseResults:                  results,
 	}
 	b, err := json.MarshalIndent(out, "", "  ")
 	fatal(err)
