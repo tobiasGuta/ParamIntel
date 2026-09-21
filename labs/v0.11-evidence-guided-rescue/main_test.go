@@ -94,3 +94,34 @@ func TestRequestFixturesAreValidRawHTTP(t *testing.T) {
 		})
 	}
 }
+
+
+func TestWordlistFixturesUseRealLineBreaks(t *testing.T) {
+	fixtures := []string{
+		"wordlist-items.txt",
+		"wordlist-search.txt",
+		"wordlist-no-signal.txt",
+		"wordlist-projects.txt",
+	}
+	for _, name := range fixtures {
+		t.Run(name, func(t *testing.T) {
+			raw, err := os.ReadFile(name)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bytes.Contains(raw, []byte(`\n`)) {
+				t.Fatalf("%s contains literal \\n escapes instead of line breaks", name)
+			}
+			lines := bytes.Split(bytes.TrimSpace(raw), []byte{'
+'})
+			if len(lines) == 0 {
+				t.Fatalf("%s contains no candidates", name)
+			}
+			for _, line := range lines {
+				if bytes.ContainsAny(line, "\r\\") {
+					t.Fatalf("%s contains malformed candidate %q", name, line)
+				}
+			}
+		})
+	}
+}
