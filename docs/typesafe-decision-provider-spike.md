@@ -387,3 +387,35 @@ Safety still comes from local invariants:
 - provider failures fail closed in the hybrid planner.
 
 This conclusion is still benchmark-local. The benchmark must expand before production graduation.
+
+
+## Experimental hybrid planner
+
+The spike now includes `internal/decision.HybridPlanner`.
+
+Policy:
+
+```text
+deterministic Decide(state)
+    |
+    +-- decided --> apply deterministic action; no provider call
+    |
+    +-- abstain --> call Jev
+                       |
+                       +-- valid catalog action --> apply directly
+                       |
+                       +-- provider unavailable/error/malformed response --> STOP
+```
+
+The hybrid planner does not use Jev probability or confidence as a production-style admission gate by default.
+
+Probability/confidence remain audit data. The existing optional `MinChoiceProbability` path is retained only for calibration experiments; `0` disables it.
+
+This keeps the important separation:
+
+```text
+decision model -> chooses a bounded experiment
+deterministic core -> executes, controls, verifies, and scores evidence
+```
+
+A wrong Jev routing decision can spend bounded characterization budget, but it cannot create a finding or raise finding confidence by itself.
