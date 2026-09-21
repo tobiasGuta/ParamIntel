@@ -23,8 +23,12 @@ func TestPlannerAppliesHighConfidenceChoice(t *testing.T) {
 		Confidence: 0.92,
 		Provider:   "stub",
 		Model:      "stub-model",
+		Probabilities: map[Action]float64{
+			ActionRelatedValueProfile: 0.92,
+			ActionStop:                0.08,
+		},
 	}}
-	plan, err := (Planner{Provider: provider, MinConfidence: 0.80}).PlanNext(context.Background(), State{
+	plan, err := (Planner{Provider: provider, MinChoiceProbability: 0.80}).PlanNext(context.Background(), State{
 		RemainingRequestBudget: 10,
 	})
 	if err != nil {
@@ -42,7 +46,7 @@ func TestPlannerGatesLowConfidenceChoiceToStop(t *testing.T) {
 		Provider:   "stub",
 		Model:      "stub-model",
 	}}
-	plan, err := (Planner{Provider: provider, MinConfidence: 0.80}).PlanNext(context.Background(), State{
+	plan, err := (Planner{Provider: provider, MinChoiceProbability: 0.80}).PlanNext(context.Background(), State{
 		RemainingRequestBudget: 10,
 	})
 	if err != nil {
@@ -76,8 +80,12 @@ func TestPlannerPreservesLowConfidenceProviderStopWithoutGate(t *testing.T) {
 		Confidence: 0.49,
 		Provider:   "stub",
 		Model:      "stub-model",
+		Probabilities: map[Action]float64{
+			ActionStop:        0.50,
+			ActionEnumProfile: 0.18,
+		},
 	}}
-	plan, err := (Planner{Provider: provider, MinConfidence: 0.80}).PlanNext(context.Background(), State{
+	plan, err := (Planner{Provider: provider, MinChoiceProbability: 0.80}).PlanNext(context.Background(), State{
 		RemainingRequestBudget: 10,
 	})
 	if err != nil {
