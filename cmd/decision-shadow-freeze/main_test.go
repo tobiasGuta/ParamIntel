@@ -73,3 +73,35 @@ func TestFreezeDatasetRejectsTamperedID(t *testing.T) {
 		t.Fatal("expected tampered id to fail")
 	}
 }
+
+
+func TestFreezeDatasetRejectsStaleShadowSchema(t *testing.T) {
+	state := decision.State{
+		Candidate: decision.CandidateState{Name: "region", Location: "query", ValueKind: "string"},
+		RemainingRequestBudget: 8,
+	}
+	record, err := decision.NewShadowCaptureRecord(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	record.SchemaVersion = ShadowSchemaVersionForTest()
+	line, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	path := filepath.Join(t.TempDir(), "shadow.jsonl")
+	if err := os.WriteFile(path, append(line, '\n'), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := freezeDataset(path); err == nil {
+		t.Fatal("expected stale shadow schema to fail")
+	}
+}
+
+func ShadowSchemaVersionForTest() int {
+	if decision.ShadowCaptureSchemaVersion == 1 {
+		return 0
+	}
+	return decision.ShadowCaptureSchemaVersion - 1
+}
