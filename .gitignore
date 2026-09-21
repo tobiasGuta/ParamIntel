@@ -5,6 +5,7 @@ paramintel-*
 dist/
 
 # Scan outputs / local research artifacts
+.paramintel/
 findings.json
 findins.json
 request.txt
