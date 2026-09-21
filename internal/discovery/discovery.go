@@ -11,7 +11,12 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/semantics"
 )
 
-type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error)
+type SemanticValueAdvice struct {
+	Values  []model.ProbeValue
+	Queried bool
+}
+
+type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (SemanticValueAdvice, error)
 type SemanticValuePriority func(candidate model.Candidate) int
 type RescuePlanObserver func(eligibleCandidates, budget int)
 type RescueAuditObserver func(model.RescueCandidateAudit)
@@ -235,14 +240,14 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			}
 			discoveryMode := "value_aware"
 			if !ok && cfg.SemanticValueAdvisor != nil && !budget.exhausted {
-				aiQueried = true
-				aiValues, err := cfg.SemanticValueAdvisor(ctx, candidate, deterministicValues)
+				advice, err := cfg.SemanticValueAdvisor(ctx, candidate, deterministicValues)
 				if err != nil {
 					return nil, err
 				}
-				aiValueCount = len(aiValues)
-				if len(aiValues) > 0 {
-					r, value, ok, err = e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, aiValues, cfg.Trials, cfg.MinConfidence, budget)
+				aiQueried = advice.Queried
+				aiValueCount = len(advice.Values)
+				if len(advice.Values) > 0 {
+					r, value, ok, err = e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, advice.Values, cfg.Trials, cfg.MinConfidence, budget)
 					if err != nil {
 						return nil, err
 					}
