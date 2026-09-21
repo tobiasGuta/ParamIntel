@@ -201,7 +201,11 @@ func main() {
 			fmt.Printf("[*] OpenAPI candidate intelligence\n")
 			fmt.Printf("    version: %s\n", openAPIReport.OpenAPIVersion)
 			fmt.Printf("    operation: %s %s\n", openAPIReport.Operation.Method, openAPIReport.Operation.SpecPath)
-			fmt.Printf("    request media type: %s\n", openAPIReport.RequestMediaType)
+			if openAPIReport.RequestMediaType == "" {
+				fmt.Printf("    request media type: <none> (bodyless request)\n")
+			} else {
+				fmt.Printf("    request media type: %s\n", openAPIReport.RequestMediaType)
+			}
 			fmt.Printf("    response: %s %s\n", openAPIReport.ResponseStatusKey, openAPIReport.ResponseMediaType)
 			fmt.Printf("    response-only descriptors: %d\n", len(openAPIReport.Candidates))
 			fmt.Printf("    existing-parent candidates admitted: %d\n", len(openAPICandidates))
