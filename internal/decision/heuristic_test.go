@@ -104,3 +104,78 @@ func TestHeuristicPlannerAbstainsWhenNoRuleMatches(t *testing.T) {
 		t.Fatal("abstain reason is empty")
 	}
 }
+
+
+func TestHeuristicPlannerStructuralEvidenceRules(t *testing.T) {
+	tests := []struct {
+		name      string
+		candidate CandidateState
+		evidence  EvidenceState
+		want      Action
+	}{
+		{
+			name:      "supported plural enum",
+			candidate: CandidateState{Name: "locale", ValueKind: "string"},
+			evidence:  EvidenceState{Paths: []string{"$.supported_locales"}},
+			want:      ActionEnumProfile,
+		},
+		{
+			name:      "available plural enum",
+			candidate: CandidateState{Name: "theme", ValueKind: "string"},
+			evidence:  EvidenceState{Paths: []string{"$.available_themes"}},
+			want:      ActionEnumProfile,
+		},
+		{
+			name:      "supported compound enum",
+			candidate: CandidateState{Name: "delivery", ValueKind: "string"},
+			evidence:  EvidenceState{Paths: []string{"$.supported_delivery_methods"}},
+			want:      ActionEnumProfile,
+		},
+		{
+			name:      "can prefix boolean",
+			candidate: CandidateState{Name: "archive", ValueKind: "string"},
+			evidence:  EvidenceState{Paths: []string{"$.capabilities.can_archive"}},
+			want:      ActionBooleanProfile,
+		},
+		{
+			name:      "supported suffix boolean",
+			candidate: CandidateState{Name: "read_only", ValueKind: "string"},
+			evidence:  EvidenceState{Paths: []string{"$.capabilities.read_only_supported"}},
+			want:      ActionBooleanProfile,
+		},
+		{
+			name:      "max prefix integer",
+			candidate: CandidateState{Name: "timeout", ValueKind: "string"},
+			evidence:  EvidenceState{Paths: []string{"$.limits.max_timeout_seconds"}},
+			want:      ActionIntegerBoundaryProfile,
+		},
+	}
+
+	planner := HeuristicPlanner{}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decision := planner.Decide(State{
+				Candidate:              tt.candidate,
+				Evidence:               tt.evidence,
+				RemainingRequestBudget: 18,
+			})
+			if !decision.Decided {
+				t.Fatalf("expected deterministic decision, got abstain: %+v", decision)
+			}
+			if decision.Action != tt.want {
+				t.Fatalf("action=%q want=%q reason=%q", decision.Action, tt.want, decision.Reason)
+			}
+		})
+	}
+}
+
+func TestHeuristicPlannerStructuralEvidenceDoesNotGuessWithoutRelationMarker(t *testing.T) {
+	decision := (HeuristicPlanner{}).Decide(State{
+		Candidate:              CandidateState{Name: "next_token", ValueKind: "string"},
+		Evidence:               EvidenceState{Paths: []string{"$.pagination.next_token"}},
+		RemainingRequestBudget: 18,
+	})
+	if decision.Decided {
+		t.Fatalf("expected abstain, got %+v", decision)
+	}
+}
