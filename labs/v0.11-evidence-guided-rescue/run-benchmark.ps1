@@ -38,7 +38,7 @@ function Assert-Equal {
         [Parameter(Mandatory=$true)][string]$Label
     )
     if ($Actual -ne $Expected) {
-        throw "$Label: got '$Actual', want '$Expected'"
+        throw "${Label}: got '$Actual', want '$Expected'"
     }
 }
 
