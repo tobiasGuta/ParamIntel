@@ -77,7 +77,7 @@ func (p Planner) PlanNext(ctx context.Context, state State) (Plan, error) {
 		Model:           result.Model,
 		Usage:           result.Usage,
 	}
-	if result.Confidence < minConfidence {
+	if result.Action != ActionStop && result.Confidence < minConfidence {
 		plan.AppliedAction = ActionStop
 		plan.Gated = true
 		plan.GateReason = fmt.Sprintf("provider confidence %.3f below %.3f threshold", result.Confidence, minConfidence)
