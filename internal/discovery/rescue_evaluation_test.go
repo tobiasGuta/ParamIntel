@@ -200,3 +200,47 @@ func TestV011RescueEvaluationApplicationEvidenceRemainsAheadOfAI(t *testing.T) {
 	}
 	t.Logf("application vs AI: legacy=%+v guided=%+v", legacy, guided)
 }
+
+
+func TestV011RescueEvaluationNoSignalDoesNotFakeSavings(t *testing.T) {
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"ok":true}`)
+	}
+	words := []string{
+		"admin",
+		"debug",
+		"include",
+		"include_deleted",
+		"internal",
+		"limit",
+		"offset",
+		"page",
+		"page_size",
+		"preview",
+		"sort",
+		"order",
+		"format",
+		"fields",
+		"expand",
+		"verbose",
+		"test",
+	}
+
+	legacy := runRescueEval(t, handler, words, nil, 64, false, nil)
+	guided := runRescueEval(t, handler, words, nil, 64, true, nil)
+
+	if len(legacy.Found) != 0 || len(guided.Found) != 0 {
+		t.Fatalf("zero-signal endpoint should not produce findings: legacy=%+v guided=%+v", legacy, guided)
+	}
+	if legacy.RequestsUsed != 60 || guided.RequestsUsed != 60 {
+		t.Fatalf("static ordering must not claim request savings where evidence is absent: legacy=%+v guided=%+v", legacy, guided)
+	}
+	if legacy.MissRequests != 60 || guided.MissRequests != 60 {
+		t.Fatalf("miss accounting mismatch: legacy=%+v guided=%+v", legacy, guided)
+	}
+	if legacy.Deferred != 0 || guided.Deferred != 0 {
+		t.Fatalf("all 17 semantic candidates should fit in 64 clean-miss requests: legacy=%+v guided=%+v", legacy, guided)
+	}
+	t.Logf("zero-signal control: legacy=%+v guided=%+v", legacy, guided)
+}
