@@ -93,6 +93,26 @@ func TestValidateAIOptions(t *testing.T) {
 	}
 }
 
+func TestValidateDecisionShadowOptions(t *testing.T) {
+	if err := validateDecisionShadowOptions("", 0, ""); err != nil {
+		t.Fatalf("disabled shadow capture rejected: %v", err)
+	}
+	if err := validateDecisionShadowOptions("shadow.jsonl", 8, "findings.json"); err != nil {
+		t.Fatalf("valid shadow capture rejected: %v", err)
+	}
+	if err := validateDecisionShadowOptions("", 8, ""); err == nil {
+		t.Fatal("shadow budget without capture path should fail")
+	}
+	for _, budget := range []int{0, -1, 101} {
+		if err := validateDecisionShadowOptions("shadow.jsonl", budget, ""); err == nil {
+			t.Fatalf("budget=%d should fail when shadow capture is enabled", budget)
+		}
+	}
+	if err := validateDecisionShadowOptions("same.json", 8, "same.json"); err == nil {
+		t.Fatal("shadow capture must not share the normal report output path")
+	}
+}
+
 func TestValidateJSONScaffoldOptions(t *testing.T) {
 	if err := validateJSONScaffoldOptions(false, ""); err != nil {
 		t.Fatalf("disabled scaffolding should not require context: %v", err)
