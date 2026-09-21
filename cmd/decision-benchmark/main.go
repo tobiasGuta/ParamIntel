@@ -90,9 +90,6 @@ func main() {
 	planner := decision.Planner{Provider: provider}
 	heuristic := decision.HeuristicPlanner{}
 
-	baseDir := filepath.Dir(manifestPath)
-	_ = baseDir
-
 	results := make([]caseResult, 0, len(m.Cases))
 	heuristicCorrect := 0
 	jevExpected := 0
@@ -100,12 +97,16 @@ func main() {
 
 	for _, bc := range m.Cases {
 		stateRaw, err := os.ReadFile(filepath.Clean(bc.StatePath))
-		fatal(fmt.Errorf("%s: read state: %w", bc.Name, err))
+		if err != nil {
+			fatal(fmt.Errorf("%s: read state: %w", bc.Name, err))
+		}
 
 		var state decision.State
 		stateDecoder := json.NewDecoder(strings.NewReader(string(stateRaw)))
 		stateDecoder.DisallowUnknownFields()
-		fatal(fmt.Errorf("%s: decode state: %w", bc.Name, stateDecoder.Decode(&state)))
+		if err := stateDecoder.Decode(&state); err != nil {
+			fatal(fmt.Errorf("%s: decode state: %w", bc.Name, err))
+		}
 
 		hAction := heuristic.Plan(state)
 		hCorrect := hAction == bc.ExpectedAction
@@ -120,7 +121,9 @@ func main() {
 		for i := 0; i < runs; i++ {
 			started := time.Now()
 			plan, err := planner.PlanNext(context.Background(), state)
-			fatal(fmt.Errorf("%s: Jev run %d: %w", bc.Name, i+1, err))
+			if err != nil {
+				fatal(fmt.Errorf("%s: Jev run %d: %w", bc.Name, i+1, err))
+			}
 			latencySum += time.Since(started).Milliseconds()
 
 			counts[plan.SuggestedAction]++
