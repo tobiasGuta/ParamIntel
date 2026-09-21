@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/tobiasGuta/ParamIntel/internal/model"
@@ -203,4 +204,92 @@ paths:
                           beta_access:
                             type: boolean
                             readOnly: true
+`
+
+
+func TestCLIOpenAPIBodylessGETUsesResponseIntelligenceOnly(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"role":"ROLE_USER","available_credit":155}`)
+	}))
+	defer srv.Close()
+
+	target, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := t.TempDir()
+	requestPath := filepath.Join(tmp, "request.txt")
+	openAPIPath := filepath.Join(tmp, "openapi.yaml")
+	outputPath := filepath.Join(tmp, "findings.json")
+
+	raw := fmt.Sprintf("GET %s/dashboard HTTP/1.1\r\nHost: %s\r\nAccept: application/json\r\nConnection: close\r\n\r\n", srv.URL, target.Host)
+	if err := os.WriteFile(requestPath, []byte(raw), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(openAPIPath, []byte(openAPISpecBodylessGET), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(
+		"go", "run", ".",
+		"-request", requestPath,
+		"-scheme", "http",
+		"-locations", "query",
+		"-openapi", openAPIPath,
+		"-baseline", "3",
+		"-trials", "3",
+		"-chunk", "8",
+		"-characterize=false",
+		"-value-aware=false",
+		"-verbose",
+		"-output", outputPath,
+	)
+	combined, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("ParamIntel CLI failed: %v\n%s", err, combined)
+	}
+
+	rawReport, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report model.ScanReport
+	if err := json.Unmarshal(rawReport, &report); err != nil {
+		t.Fatalf("decode report: %v\n%s", err, rawReport)
+	}
+	if len(report.Parameters) != 0 {
+		t.Fatalf("bodyless GET must not admit JSON findings: %+v\nCLI:\n%s", report.Parameters, combined)
+	}
+	output := string(combined)
+	if !strings.Contains(output, "operation: GET /dashboard") {
+		t.Fatalf("missing matched operation in CLI:\n%s", output)
+	}
+	if !strings.Contains(output, "request media type: <none> (bodyless request)") {
+		t.Fatalf("missing bodyless request marker in CLI:\n%s", output)
+	}
+	if !strings.Contains(output, "response-only descriptors: 0") {
+		t.Fatalf("bodyless GET should not admit response-only JSON descriptors as candidates:\n%s", output)
+	}
+}
+
+const openAPISpecBodylessGET = `openapi: 3.0.1
+info:
+  title: bodyless get
+  version: 1.0.0
+paths:
+  /dashboard:
+    get:
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  role:
+                    type: string
+                  available_credit:
+                    type: number
 `
