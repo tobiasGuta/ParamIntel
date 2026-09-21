@@ -32,8 +32,8 @@ type datasetCase struct {
 
 func main() {
 	var inputPath, outputPath string
-	flag.StringVar(&inputPath, "input", ".\.paramintel\\decision-shadow.jsonl", "shadow capture JSONL input")
-	flag.StringVar(&outputPath, "output", ".\.paramintel\\decision-shadow-dataset.json", "frozen labeling dataset output")
+	flag.StringVar(&inputPath, "input", "./.paramintel/decision-shadow.jsonl", "shadow capture JSONL input")
+	flag.StringVar(&outputPath, "output", "./.paramintel/decision-shadow-dataset.json", "frozen labeling dataset output")
 	flag.Parse()
 
 	d, err := freezeDataset(inputPath)
