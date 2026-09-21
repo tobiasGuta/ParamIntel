@@ -47,6 +47,8 @@ type caseResult struct {
 	HybridAppliedAction     decision.Action `json:"hybrid_applied_action"`
 	HybridAppliedExpectedRate float64       `json:"hybrid_applied_expected_rate"`
 	HybridUsesJev           bool            `json:"hybrid_uses_jev"`
+	StopFallbackAction      decision.Action `json:"stop_fallback_action"`
+	StopFallbackCorrect     bool            `json:"stop_fallback_correct"`
 }
 
 type gatePolicyResult struct {
@@ -81,6 +83,8 @@ type report struct {
 	HybridAppliedExpectedRate    float64      `json:"hybrid_applied_expected_rate"`
 	HybridJevFallbackCalls       int          `json:"hybrid_jev_fallback_calls"`
 	HybridJevFallbackRate        float64      `json:"hybrid_jev_fallback_rate"`
+	StopFallbackExpectedCases    int          `json:"stop_fallback_expected_cases"`
+	StopFallbackExpectedRate     float64      `json:"stop_fallback_expected_rate"`
 	ShadowGatePolicies           []gatePolicyResult `json:"shadow_gate_policies"`
 	CaseResults                  []caseResult      `json:"case_results"`
 }
@@ -137,6 +141,7 @@ func main() {
 	hybridAppliedExpected := 0
 	hybridTotal := 0
 	hybridJevCalls := 0
+	stopFallbackExpected := 0
 
 	marginThresholds := []float64{0, 0.03, 0.05, 0.08, 0.10, 0.15, 0.20, 0.30}
 	type gateAccumulator struct {
@@ -165,6 +170,14 @@ func main() {
 		hDecision := heuristic.Decide(state)
 		hAction := hDecision.Action
 		hCorrect := hDecision.Decided && hAction == bc.ExpectedAction
+		stopFallbackAction := hAction
+		if !hDecision.Decided {
+			stopFallbackAction = decision.ActionStop
+		}
+		stopFallbackCorrect := stopFallbackAction == bc.ExpectedAction
+		if stopFallbackCorrect {
+			stopFallbackExpected++
+		}
 		if hDecision.Decided {
 			heuristicDecided++
 		}
@@ -285,6 +298,8 @@ func main() {
 			HybridAppliedAction:     hybridAppliedAction,
 			HybridAppliedExpectedRate: hybridAppliedExpectedRate,
 			HybridUsesJev:           hybridUsesJev,
+			StopFallbackAction:      stopFallbackAction,
+			StopFallbackCorrect:     stopFallbackCorrect,
 		})
 	}
 
@@ -334,6 +349,8 @@ func main() {
 		HybridAppliedExpectedRate:    float64(hybridAppliedExpected) / float64(hybridTotal),
 		HybridJevFallbackCalls:       hybridJevCalls,
 		HybridJevFallbackRate:        float64(hybridJevCalls) / float64(hybridTotal),
+		StopFallbackExpectedCases:    stopFallbackExpected,
+		StopFallbackExpectedRate:     float64(stopFallbackExpected) / float64(len(m.Cases)),
 		ShadowGatePolicies:           shadowPolicies,
 		CaseResults:                  results,
 	}
