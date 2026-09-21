@@ -338,3 +338,52 @@ and remains stable/cost-effective:
 ```
 
 The benchmark should be expanded before any production merge, but it is now sufficient to test whether Jev is providing reasoning value beyond obvious local rules.
+
+
+## Gate calibration conclusion
+
+The 13-case benchmark showed that the original absolute selected-probability gate was counterproductive for this bounded decision job.
+
+Observed benchmark behavior:
+
+```text
+deterministic coverage:              38.46%
+deterministic accuracy when decided: 100%
+
+Jev raw expected-action rate:        ~86%
+hybrid raw expected-action rate:     ~86%
+
+0.80 probability-gated Jev:          materially worse
+0.80 probability-gated hybrid:       materially worse
+```
+
+A shadow decision-margin sweep also failed to improve the raw policy. Every positive tested margin threshold reduced expected-action accuracy versus accepting any valid catalog choice.
+
+This does **not** mean Jev probabilities are useless. They remain valuable audit/calibration data. It means the current benchmark does not support using them as an admission gate for a fixed catalog of low-risk characterization experiments.
+
+The spike therefore now defaults to:
+
+```text
+valid catalog choice -> apply
+```
+
+Numeric probability gating is opt-in for experiments only:
+
+```powershell
+-min-choice-probability 0.80
+```
+
+A value of `0` disables numeric gating.
+
+Safety still comes from local invariants:
+
+- fixed action catalog;
+- request-budget enforcement;
+- unknown-action rejection;
+- malformed-response rejection;
+- deterministic HTTP execution;
+- paired controls and repeated verification;
+- Jev never modifies finding confidence;
+- provider failures fail closed in the hybrid planner.
+
+This conclusion is still benchmark-local. The benchmark must expand before production graduation.
