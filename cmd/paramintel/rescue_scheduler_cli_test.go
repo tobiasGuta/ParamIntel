@@ -96,3 +96,72 @@ func TestCLIEvidenceGuidedRescueUsesContextWithoutAI(t *testing.T) {
 		t.Fatalf("unexpected rescue accounting=%+v", audit)
 	}
 }
+
+
+func TestCLIEvidenceGuidedRescueUsesCheapestBuiltInProfileFirst(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Query().Get("order") == "asc" {
+			fmt.Fprint(w, `{"ok":true,"ordered":true}`)
+			return
+		}
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	target, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := t.TempDir()
+	requestPath := filepath.Join(tmp, "request.txt")
+	outputPath := filepath.Join(tmp, "report.json")
+	raw := fmt.Sprintf("GET %s/api/search HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", srv.URL, target.Host)
+	if err := os.WriteFile(requestPath, []byte(raw), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(
+		"go", "run", ".",
+		"-request", requestPath,
+		"-scheme", "http",
+		"-locations", "query",
+		"-baseline", "3",
+		"-trials", "3",
+		"-chunk", "64",
+		"-characterize=false",
+		"-value-aware=true",
+		"-value-aware-budget", "8",
+		"-output", outputPath,
+	)
+	combined, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("ParamIntel CLI failed: %v\n%s", err, combined)
+	}
+
+	rawReport, err := os.ReadFile(outputPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report model.ScanReport
+	if err := json.Unmarshal(rawReport, &report); err != nil {
+		t.Fatalf("decode report: %v\n%s", err, rawReport)
+	}
+
+	if len(report.Parameters) != 1 || report.Parameters[0].Name != "order" {
+		t.Fatalf("parameters=%+v\nCLI:\n%s", report.Parameters, combined)
+	}
+	if report.Parameters[0].DiscoveryMode != "value_aware" || report.Parameters[0].DiscoveryValue != "asc" {
+		t.Fatalf("finding=%+v", report.Parameters[0])
+	}
+	if report.ValueAware == nil || len(report.ValueAware.CandidateAudit) != 1 {
+		t.Fatalf("value-aware summary=%+v", report.ValueAware)
+	}
+	audit := report.ValueAware.CandidateAudit[0]
+	if audit.Name != "order" || audit.EvidenceTier != "D" || audit.DeterministicValues != 2 {
+		t.Fatalf("unexpected first rescue audit=%+v", audit)
+	}
+	if audit.RequestsUsed != 8 || audit.Outcome != "verified" {
+		t.Fatalf("unexpected rescue accounting=%+v", audit)
+	}
+}
