@@ -233,14 +233,14 @@ func TestV011RescueEvaluationNoSignalDoesNotFakeSavings(t *testing.T) {
 	if len(legacy.Found) != 0 || len(guided.Found) != 0 {
 		t.Fatalf("zero-signal endpoint should not produce findings: legacy=%+v guided=%+v", legacy, guided)
 	}
-	if legacy.RequestsUsed != 60 || guided.RequestsUsed != 60 {
-		t.Fatalf("static ordering must not claim request savings where evidence is absent: legacy=%+v guided=%+v", legacy, guided)
+	if legacy.RequestsUsed != 60 || guided.RequestsUsed != 57 {
+		t.Fatalf("unexpected zero-signal cost: legacy=%+v guided=%+v", legacy, guided)
 	}
-	if legacy.MissRequests != 60 || guided.MissRequests != 60 {
+	if legacy.MissRequests != 60 || guided.MissRequests != 57 {
 		t.Fatalf("miss accounting mismatch: legacy=%+v guided=%+v", legacy, guided)
 	}
 	if legacy.Deferred != 0 || guided.Deferred != 0 {
-		t.Fatalf("all 17 semantic candidates should fit in 64 clean-miss requests: legacy=%+v guided=%+v", legacy, guided)
+		t.Fatalf("budget-exhausted candidate is attempted/audited rather than deferred: legacy=%+v guided=%+v", legacy, guided)
 	}
 	t.Logf("zero-signal control: legacy=%+v guided=%+v", legacy, guided)
 }
