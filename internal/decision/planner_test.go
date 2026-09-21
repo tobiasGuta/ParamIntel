@@ -39,12 +39,16 @@ func TestPlannerAppliesHighConfidenceChoice(t *testing.T) {
 	}
 }
 
-func TestPlannerGatesLowConfidenceChoiceToStop(t *testing.T) {
+func TestPlannerGatesLowProbabilityChoiceToStop(t *testing.T) {
 	provider := &stubProvider{result: Result{
 		Action:     ActionRelatedValueProfile,
-		Confidence: 0.61,
+		Confidence: 0.91,
 		Provider:   "stub",
 		Model:      "stub-model",
+		Probabilities: map[Action]float64{
+			ActionRelatedValueProfile: 0.61,
+			ActionStop:                0.39,
+		},
 	}}
 	plan, err := (Planner{Provider: provider, MinChoiceProbability: 0.80}).PlanNext(context.Background(), State{
 		RemainingRequestBudget: 10,
