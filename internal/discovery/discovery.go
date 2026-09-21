@@ -12,6 +12,7 @@ import (
 )
 
 type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error)
+type SemanticValuePriority func(candidate model.Candidate) int
 
 type Config struct {
 	ChunkSize            int
@@ -25,6 +26,7 @@ type Config struct {
 	ValueAware           bool
 	ValueAwareBudget     int
 	SemanticValueAdvisor SemanticValueAdvisor
+	SemanticValuePriority SemanticValuePriority
 	JSONScaffold         bool
 }
 
@@ -157,7 +159,14 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 		e.verbosef("    eligible candidates: %d\n", eligible)
 		e.verbosef("    semantic probe budget: %d requests\n", cfg.ValueAwareBudget)
 
-		for _, candidate := range targets {
+		rescueTargets := append([]model.Candidate(nil), targets...)
+		if cfg.SemanticValueAdvisor != nil && cfg.SemanticValuePriority != nil {
+			sort.SliceStable(rescueTargets, func(i, j int) bool {
+				return cfg.SemanticValuePriority(rescueTargets[i]) > cfg.SemanticValuePriority(rescueTargets[j])
+			})
+		}
+
+		for _, candidate := range rescueTargets {
 			if budget.exhausted {
 				break
 			}
