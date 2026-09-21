@@ -13,7 +13,7 @@ import (
 
 type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error)
 type SemanticValuePriority func(candidate model.Candidate) int
-type VerifiedParameterObserver func(result model.ParameterResult)
+type ResidualDecisionObserver func(result model.ParameterResult, remainingBudget int)
 
 type Config struct {
 	ChunkSize            int
@@ -28,7 +28,7 @@ type Config struct {
 	ValueAwareBudget     int
 	SemanticValueAdvisor SemanticValueAdvisor
 	SemanticValuePriority SemanticValuePriority
-	VerifiedParameterObserver VerifiedParameterObserver
+	ResidualDecisionObserver ResidualDecisionObserver
 	JSONScaffold         bool
 }
 
@@ -107,6 +107,7 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 	}
 
 	genericAttempted := map[string]struct{}{}
+	genericResults := map[string]model.ParameterResult{}
 	accepted := map[string]struct{}{}
 	rescueExcluded := map[string]struct{}{}
 	results := make([]model.ParameterResult, 0)
@@ -120,6 +121,7 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 		if err != nil {
 			return nil, err
 		}
+		genericResults[key] = r
 		if float64(r.Confidence) < cfg.MinConfidence {
 			e.logVerification(r, false, cfg.MinConfidence)
 			// Semantic rescue is deliberately conservative. If generic probing
@@ -127,11 +129,11 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			// using additional values. Only clean 0/0 misses can be rescued.
 			if r.CandidateChanged > 0 || r.RandomControlChanged > 0 {
 				rescueExcluded[key] = struct{}{}
+				if cfg.ResidualDecisionObserver != nil && cfg.ValueAware && cfg.ValueAwareBudget > 0 {
+					cfg.ResidualDecisionObserver(r, cfg.ValueAwareBudget)
+				}
 			}
 			continue
-		}
-		if cfg.VerifiedParameterObserver != nil {
-			cfg.VerifiedParameterObserver(r)
 		}
 		if cfg.Characterize {
 			if err := e.characterize(ctx, tmpl, profile, candidate, &r); err != nil {
@@ -182,6 +184,20 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			if _, ok := rescueExcluded[key]; ok {
 				continue
 			}
+
+			shadowResult, ok := genericResults[key]
+			if !ok {
+				shadowResult = model.ParameterResult{
+					Name:             candidate.Name,
+					Location:         candidate.Location,
+					JSONPath:         candidate.JSONPath(),
+					CandidateSources: append([]model.CandidateSource(nil), candidate.Sources...),
+				}
+			}
+			if cfg.ResidualDecisionObserver != nil {
+				cfg.ResidualDecisionObserver(shadowResult, budget.remaining)
+			}
+
 			deterministicValues := semantics.ProfileValues(candidate.Name, candidate.Location)
 			if len(deterministicValues) == 0 && cfg.SemanticValueAdvisor == nil {
 				continue
@@ -211,9 +227,6 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			r.DiscoveryMode = discoveryMode
 			r.DiscoveryValue = value.Raw
 			r.DiscoveryValueKind = value.Kind
-			if cfg.VerifiedParameterObserver != nil {
-				cfg.VerifiedParameterObserver(r)
-			}
 			if cfg.Characterize {
 				if err := e.characterize(ctx, tmpl, profile, candidate, &r); err != nil {
 					return nil, err
