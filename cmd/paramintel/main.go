@@ -290,6 +290,14 @@ func main() {
 		}
 	}
 
+	var rescueAudits []model.RescueCandidateAudit
+	rescueAuditObserver := discovery.RescueAuditObserver(nil)
+	if valueAware && valueAwareBudget > 0 {
+		rescueAuditObserver = func(audit model.RescueCandidateAudit) {
+			rescueAudits = append(rescueAudits, audit)
+		}
+	}
+
 	engine := discovery.Engine{Client: client, Config: discovery.Config{
 		ChunkSize:        chunk,
 		Trials:           trials,
@@ -303,6 +311,7 @@ func main() {
 		ValueAwareBudget:     valueAwareBudget,
 		SemanticValueAdvisor:  semanticValueAdvisor,
 		SemanticValuePriority: semanticValuePriority,
+		RescueAuditObserver:   rescueAuditObserver,
 		JSONScaffold:          jsonScaffold,
 	}}
 	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
@@ -318,13 +327,29 @@ func main() {
 	if verbose && aiSummary != nil {
 		printAIAdvisorAudit(aiSummary)
 	}
+	var valueAwareSummary *model.ValueAwareSummary
+	if valueAware && valueAwareBudget > 0 {
+		valueAwareSummary = &model.ValueAwareSummary{
+			Budget:              valueAwareBudget,
+			CandidatesAttempted: len(rescueAudits),
+			CandidateAudit:      rescueAudits,
+		}
+		for _, audit := range rescueAudits {
+			valueAwareSummary.RequestsUsed += audit.RequestsUsed
+			if audit.Outcome == "verified" {
+				valueAwareSummary.VerifiedParameters++
+			}
+		}
+	}
+
 	report := model.ScanReport{
-		Version:    version,
-		Target:     tmpl.URL,
-		Method:     tmpl.Method,
-		Baseline:   model.BaselineSummary{Samples: profile.Samples, StableJSONPaths: len(profile.StableJSONPaths), BodyLenMin: profile.BodyLenMin, BodyLenMax: profile.BodyLenMax},
+		Version:        version,
+		Target:         tmpl.URL,
+		Method:         tmpl.Method,
+		Baseline:       model.BaselineSummary{Samples: profile.Samples, StableJSONPaths: len(profile.StableJSONPaths), BodyLenMin: profile.BodyLenMin, BodyLenMax: profile.BodyLenMax},
 		AIAdvisor:      aiSummary,
 		AIValueAdvisor: aiValueSummary,
+		ValueAware:     valueAwareSummary,
 		Parameters:     params,
 	}
 	b, err := json.MarshalIndent(report, "", "  ")
