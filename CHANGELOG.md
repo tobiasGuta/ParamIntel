@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.10.0
+
+- Added the optional AI Semantic Value Advisor for known candidate parameters whose behavior depends on application-specific values that generic probing and deterministic semantic profiles do not cover.
+- Kept AI outside the evidence boundary: model output remains a bounded hypothesis source, while only live application behavior, repeated candidate/control trials, and the existing confidence model can produce a finding.
+- Added `-ai-value-advisor`, `-ai-value-budget`, and `-ai-value-candidate-budget` CLI controls. The existing `-value-aware-budget` remains the hard target-request budget and cannot be bypassed by AI.
+- Reused the provider-neutral AI layer with Gemini as the first Semantic Value Advisor implementation and preserved local API-key handling through `GEMINI_API_KEY`.
+- Added local admission rules for AI values: query/form values are normalized to bounded semantic strings, JSON values are limited to string/boolean/integer/null, and duplicates, deterministic values, malformed typed values, unsupported kinds, overlong values, and payload-like syntax are rejected locally.
+- Added bounded enum-like semantic hints from structurally relevant response fields such as `available_visibilities`, while continuing to exclude raw response text and arbitrary primitive response values from provider input.
+- Added local structural relevance scoring so scarce AI candidate-query budget is spent on candidates supported by observed application structure before unrelated generic candidates.
+- Added `ai_value_advisor` report metadata and `discovery_mode: ai_value_aware` provenance for findings verified through AI-suggested values.
+- Added the reproducible `labs/semantic-value-advisor` localhost acceptance lab.
+- Manual A/B acceptance confirmed the control run reported zero parameters, while the AI-enabled run proposed `visibility=internal`; ParamIntel independently verified it at 3/3 candidate changes versus 0/3 same-value random-name control changes with 1.00 HIGH confidence.
+- Preserved deterministic value-aware discovery ordering: if an existing semantic profile such as `debug=true` verifies the candidate, the AI Semantic Value Advisor is never called.
+- Preserved OpenAPI authority boundaries, JSON evidence semantics, rate-limit/backoff integrity, controlled JSON scaffolding, state-changing-method authorization, and the existing confidence model.
+- Updated the CLI/report version and release-facing documentation to `ParamIntel v0.10.0`.
+
 ## v0.9.3
 
 - Moved ParamIntel's supported Go baseline from Go 1.23 to Go 1.26.
