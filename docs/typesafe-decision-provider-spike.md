@@ -499,3 +499,37 @@ go run .\cmd\decision-benchmark `
 ```
 
 Do not alter heuristic rules or catalog semantics before recording this result.
+
+
+## End-to-end HybridPlanner benchmark
+
+The synthetic benchmark reconstructs hybrid behavior for comparison. The spike also includes a direct runner for the actual `decision.HybridPlanner` implementation:
+
+```powershell
+go run .\cmd\decision-hybrid-benchmark `
+  -manifest .\labs\typesafe-decision-provider\benchmark-holdout-v2.json `
+  -runs 5
+```
+
+This runner reports:
+
+- applied expected-action rate;
+- modal case accuracy;
+- deterministic decision count;
+- provider decision count;
+- fail-closed decision count;
+- per-case provider/deterministic/fail-closed rates;
+- mean latency.
+
+The v2 holdout result from the comparison benchmark is frozen at:
+
+```text
+Jev/hybrid per-run expected-action rate: 87/90 = 96.67%
+Jev/hybrid modal case accuracy:          17/18 = 94.44%
+STOP-on-abstain baseline:                4/18 = 22.22%
+numeric gate interventions:              0
+```
+
+The only modal miss was `plan -> enum_profile`, where Jev chose STOP in 3/5 runs.
+
+This is sufficient to continue evaluating Jev as the residual semantic planner. It is not yet sufficient to wire the provider into ParamIntel's production scan path. The remaining graduation work is end-to-end HybridPlanner verification and sanitized real-flow evaluation.
