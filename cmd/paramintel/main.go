@@ -256,9 +256,9 @@ func main() {
 			ContextSource: aiContextSource,
 		}
 		remainingCandidates := aiValueCandidateBudget
-		semanticValueAdvisor = func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) ([]model.ProbeValue, error) {
+		semanticValueAdvisor = func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (discovery.SemanticValueAdvice, error) {
 			if remainingCandidates <= 0 {
-				return nil, nil
+				return discovery.SemanticValueAdvice{}, nil
 			}
 			remainingCandidates--
 			excluded := make([]aiadvisor.ValueIdentity, 0, len(deterministic))
@@ -278,7 +278,7 @@ func main() {
 			}
 			result, err := aiadvisor.GenerateValues(ctx, aiProvider, valueInput, aiValueBudget)
 			if err != nil {
-				return nil, err
+				return discovery.SemanticValueAdvice{}, err
 			}
 			aiValueSummary.CandidateQueries++
 			aiValueSummary.SuggestedValues += result.SuggestedCount
@@ -297,7 +297,7 @@ func main() {
 					fmt.Printf("\n")
 				}
 			}
-			return result.Values, nil
+			return discovery.SemanticValueAdvice{Values: result.Values, Queried: true}, nil
 		}
 	}
 
