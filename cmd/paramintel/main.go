@@ -356,7 +356,7 @@ func main() {
 			case "verified":
 				valueAwareSummary.VerifiedParameters++
 				valueAwareSummary.VerifiedRequests += audit.RequestsUsed
-			case "miss":
+			case "miss", "verification_budget_insufficient":
 				valueAwareSummary.MissRequests += audit.RequestsUsed
 			case "budget_exhausted":
 				valueAwareSummary.BudgetExhaustedRequests += audit.RequestsUsed
