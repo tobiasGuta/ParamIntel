@@ -537,9 +537,9 @@ This is sufficient to continue evaluating Jev as the residual semantic planner. 
 
 ## Real-flow residual shadow capture
 
-Schema v2 captures sanitized **decision-needed residual states immediately before semantic/value-aware rescue**.
+Schema v3 captures sanitized **decision-needed residual states immediately before semantic/value-aware rescue**.
 
-This corrects the original schema-v1 experiment. Schema v1 captured already-verified findings before characterization. Those states usually had candidate 3/3, control 0/3, and high confidence, causing the deterministic heuristic to STOP before Jev could ever be consulted. They therefore cannot measure Jev's residual routing value and must not be mixed with schema-v2 data.
+This supersedes two earlier capture populations. Schema v1 captured already-verified findings before characterization. Schema v2 moved to the residual lifecycle but briefly captured candidates before checking whether they could actually reach semantic rescue. Schema v3 captures only decision-relevant residuals that can reach the current semantic-rescue path, plus explicit noisy/control-changed residuals that deterministic logic already stops. Earlier schemas must not be mixed with schema-v3 data.
 
 The v2 capture point matches the benchmark lifecycle:
 
@@ -576,7 +576,7 @@ go run .\cmd\paramintel `
 
 This prevents the shadow dataset from pretending more request authority than either the live scan or the future bounded planner should have.
 
-Each schema-v2 JSONL record contains only:
+Each schema-v3 JSONL record contains only:
 
 - candidate name;
 - candidate location;
