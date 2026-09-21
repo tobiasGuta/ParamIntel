@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/baseline"
 	"github.com/tobiasGuta/ParamIntel/internal/candidates"
 	"github.com/tobiasGuta/ParamIntel/internal/contextintel"
+	"github.com/tobiasGuta/ParamIntel/internal/decision"
 	"github.com/tobiasGuta/ParamIntel/internal/discovery"
 	"github.com/tobiasGuta/ParamIntel/internal/httppolicy"
 	"github.com/tobiasGuta/ParamIntel/internal/httpraw"
@@ -29,7 +31,8 @@ const (
 func main() {
 	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath, openAPIPath string
 	var aiProviderName, aiModel, aiAPIKeyEnv, aiContextResponsePath string
-	var baselineN, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget int
+	var decisionShadowCapturePath string
+	var baselineN, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget, decisionShadowBudget int
 	var timeout, delay, aiTimeout time.Duration
 	var minConf float64
 	var verbose, characterize, valueAware, allowStateChanging, showVersion, aiAdvisorEnabled, aiValueAdvisorEnabled, jsonScaffold bool
@@ -66,6 +69,9 @@ func main() {
 	flag.IntVar(&aiValueCandidateBudget, "ai-value-candidate-budget", 8, "maximum candidates submitted to the AI Semantic Value Advisor")
 	flag.DurationVar(&aiTimeout, "ai-timeout", defaultAIProviderTimeout, "AI provider request timeout")
 
+	flag.StringVar(&decisionShadowCapturePath, "decision-shadow-capture", "", "optional local JSONL path for sanitized pre-characterization decision states; does not call a decision provider or alter scan behavior")
+	flag.IntVar(&decisionShadowBudget, "decision-shadow-budget", 0, "hypothetical remaining characterization request budget stored in shadow decision states; required with -decision-shadow-capture")
+
 	flag.BoolVar(&showVersion, "version", false, "print version and exit")
 	flag.Parse()
 	if showVersion {
@@ -85,6 +91,7 @@ func main() {
 	fatal(validateDelay(delay))
 	fatal(validateAIOptions(aiAdvisorEnabled, aiValueAdvisorEnabled, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget, aiTimeout))
 	fatal(validateJSONScaffoldOptions(jsonScaffold, contextResponsePath))
+	fatal(validateDecisionShadowOptions(decisionShadowCapturePath, decisionShadowBudget, outPath))
 
 	locations, err := parseLocations(locationSpec)
 	fatal(err)
@@ -290,6 +297,24 @@ func main() {
 		}
 	}
 
+	var decisionShadowObserver discovery.VerifiedParameterObserver
+	var decisionShadowCaptureErr error
+	decisionShadowCaptured := 0
+	if strings.TrimSpace(decisionShadowCapturePath) != "" {
+		decisionShadowObserver = func(result model.ParameterResult) {
+			if decisionShadowCaptureErr != nil {
+				return
+			}
+			state := decision.StateFromParameterResult(result, decisionShadowBudget)
+			if err := decision.AppendShadowCaptureJSONL(decisionShadowCapturePath, state); err != nil {
+				decisionShadowCaptureErr = err
+				fmt.Fprintf(os.Stderr, "warning: decision shadow capture disabled after write failure: %v\n", err)
+				return
+			}
+			decisionShadowCaptured++
+		}
+	}
+
 	engine := discovery.Engine{Client: client, Config: discovery.Config{
 		ChunkSize:        chunk,
 		Trials:           trials,
@@ -301,12 +326,23 @@ func main() {
 		Characterize:     characterize,
 		ValueAware:       valueAware,
 		ValueAwareBudget:     valueAwareBudget,
-		SemanticValueAdvisor:  semanticValueAdvisor,
-		SemanticValuePriority: semanticValuePriority,
-		JSONScaffold:          jsonScaffold,
+		SemanticValueAdvisor:      semanticValueAdvisor,
+		SemanticValuePriority:     semanticValuePriority,
+		VerifiedParameterObserver: decisionShadowObserver,
+		JSONScaffold:              jsonScaffold,
 	}}
 	params, err := engine.ScanWithCandidates(ctx, tmpl, profile, words, seeded)
 	fatal(err)
+	if strings.TrimSpace(decisionShadowCapturePath) != "" && verbose {
+		fmt.Printf("[*] Decision shadow capture\n")
+		fmt.Printf("    policy: sanitized pre-characterization state only\n")
+		fmt.Printf("    provider calls: 0\n")
+		fmt.Printf("    captured records: %d\n", decisionShadowCaptured)
+		fmt.Printf("    output: %s\n", decisionShadowCapturePath)
+		if decisionShadowCaptureErr != nil {
+			fmt.Printf("    warning: capture stopped after write failure: %v\n", decisionShadowCaptureErr)
+		}
+	}
 	finalizeAIAdvisorSummary(aiSummary, params)
 	if aiValueSummary != nil {
 		for _, parameter := range params {
@@ -362,6 +398,23 @@ func validateAIOptions(candidateEnabled, valueEnabled bool, candidateBudget, val
 	}
 	if timeout <= 0 {
 		return fmt.Errorf("-ai-timeout must be greater than zero when an AI advisor is enabled")
+	}
+	return nil
+}
+
+func validateDecisionShadowOptions(capturePath string, budget int, outputPath string) error {
+	capturePath = strings.TrimSpace(capturePath)
+	if capturePath == "" {
+		if budget != 0 {
+			return fmt.Errorf("-decision-shadow-budget requires -decision-shadow-capture")
+		}
+		return nil
+	}
+	if budget < 1 || budget > 100 {
+		return fmt.Errorf("-decision-shadow-budget must be between 1 and 100 when -decision-shadow-capture is enabled")
+	}
+	if strings.TrimSpace(outputPath) != "" && filepath.Clean(capturePath) == filepath.Clean(strings.TrimSpace(outputPath)) {
+		return fmt.Errorf("-decision-shadow-capture must not use the same path as -output")
 	}
 	return nil
 }
