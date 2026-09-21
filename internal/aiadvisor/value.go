@@ -19,9 +19,10 @@ const (
 var safeSemanticString = regexp.MustCompile("^[A-Za-z0-9][A-Za-z0-9 _.:+-]{0,79}$")
 
 type ValueInput struct {
-	Application      Input           `json:"application"`
-	Candidate        ValueCandidate  `json:"candidate"`
-	ExcludedValues   []ValueIdentity `json:"excluded_values,omitempty"`
+	Application    Input           `json:"application"`
+	Candidate      ValueCandidate  `json:"candidate"`
+	SemanticHints  []string        `json:"semantic_hints,omitempty"`
+	ExcludedValues []ValueIdentity `json:"excluded_values,omitempty"`
 }
 
 type ValueCandidate struct {
