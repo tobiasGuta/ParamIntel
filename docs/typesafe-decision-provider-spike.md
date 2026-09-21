@@ -541,7 +541,7 @@ Schema v3 captures sanitized **decision-needed residual states immediately befor
 
 This supersedes two earlier capture populations. Schema v1 captured already-verified findings before characterization. Schema v2 moved to the residual lifecycle but briefly captured candidates before checking whether they could actually reach semantic rescue. Schema v3 captures only decision-relevant residuals that can reach the current semantic-rescue path, plus explicit noisy/control-changed residuals that deterministic logic already stops. Earlier schemas must not be mixed with schema-v3 data.
 
-The v2 capture point matches the benchmark lifecycle:
+The v3 capture point matches the benchmark lifecycle:
 
 ```text
 normal deterministic discovery
@@ -671,3 +671,70 @@ Do not force a fixed positive-finding quota from one live target.
 The useful population is residual decision states, including clean misses and deterministic STOP cases, not only verified findings. Collect them opportunistically from normal authorized ParamIntel use, deduplicate them, freeze the dataset, and label it before provider replay.
 
 Do not tune the deterministic heuristic or Jev action catalog against a frozen evaluation dataset. If a frozen set is used to change routing logic, demote it to development evidence and create a fresh holdout.
+
+
+## Final graduation evaluation
+
+The final evaluation used a frozen schema-v3 residual dataset captured from the real ParamIntel pre-semantic-rescue lifecycle.
+
+Dataset:
+
+```text
+cases:                     17
+runs per case:              5
+total decisions:           85
+```
+
+The expert labels were frozen before Jev replay. The deterministic heuristic and action catalog were not tuned after seeing the replay result.
+
+Final HybridPlanner replay:
+
+```text
+expected decisions:        30 / 85
+expected-action rate:      35.29%
+modal correct cases:        6 / 17
+modal accuracy:            35.29%
+
+deterministic decisions:   40
+provider decisions:        45
+fail-closed decisions:      0
+
+input tokens:              39,150
+output tokens:              4,050
+mean latency:              106.61 ms per decision
+```
+
+The independently frozen deterministic+STOP baseline was also 35.29%.
+
+Therefore:
+
+```text
+deterministic + STOP baseline: 35.29%
+deterministic + Jev hybrid:    35.29%
+incremental improvement:        0
+```
+
+The provider path itself remained healthy: there were no fail-closed decisions in the final replay. The failure was not API reliability or contract enforcement. Jev simply selected STOP on the residual cases routed to it often enough that it produced no measurable improvement over the deterministic baseline.
+
+This contrasts with the synthetic residual holdout, where richer structural clues produced approximately 94-97% Jev/hybrid agreement. The final schema-v3 states were much sparser and often contained little more than a candidate name, location, empty verification evidence, and remaining budget. That difference is material: the synthetic holdout measured semantic routing with structural evidence, while the final residual replay measured the actual information available at the current ParamIntel decision point.
+
+### Graduation decision
+
+Do **not** integrate TypeSafe Jev into ParamIntel production behavior at this time.
+
+The spike successfully validated:
+
+- the bounded decision-provider abstraction;
+- fixed local action catalog enforcement;
+- deterministic-first routing;
+- fail-closed provider behavior;
+- privacy-preserving shadow capture;
+- frozen dataset generation;
+- independent labeling;
+- offline replay through the actual HybridPlanner.
+
+However, the production graduation gate was not met because Jev did not materially outperform deterministic+STOP on the final real-flow residual dataset.
+
+The branch should remain historical experiment evidence rather than be merged into production.
+
+A future reevaluation is justified only if ParamIntel's pre-rescue state becomes materially richer, for example through trustworthy structural/schema/context clues that are available before the bounded decision is made. In that case, reuse this harness and require a fresh frozen holdout rather than tuning against this final dataset.
