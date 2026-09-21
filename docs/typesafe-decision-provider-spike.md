@@ -39,7 +39,7 @@ Unknown actions are rejected locally.
 The planner adds local gates around the provider:
 
 - zero remaining request budget -> STOP without calling Jev;
-- provider confidence below the local threshold -> STOP;
+- selected action probability below the local threshold -> STOP;
 - unknown action -> reject the provider response;
 - malformed confidence/probabilities -> reject the provider response.
 
@@ -49,7 +49,7 @@ Default decision threshold:
 0.80
 ```
 
-Jev confidence is only used to gate the routing decision. It never contributes to ParamIntel vulnerability confidence.
+Jev's overall choice confidence is retained for audit, but the local routing gate uses the selected action's probability. Neither signal contributes to ParamIntel vulnerability confidence.
 
 ## Input boundary
 
@@ -95,7 +95,7 @@ Run:
 ```powershell
 go run .\cmd\decision-spike `
   -state .\labs\typesafe-decision-provider\state.json `
-  -min-confidence 0.80
+  -min-choice-probability 0.80
 ```
 
 The output preserves both what Jev suggested and what the local gate actually applies.
@@ -113,7 +113,7 @@ Example shape:
 }
 ```
 
-If the model suggests a non-STOP action below the local threshold, `suggested_action` remains visible for audit but `applied_action` becomes `stop`.
+If the model suggests a non-STOP action whose selected-label probability is below the local threshold, `suggested_action` remains visible for audit but `applied_action` becomes `stop`. Provider-selected `STOP` is never relabeled as a gate intervention.
 
 ## Acceptance criteria
 
@@ -135,7 +135,7 @@ Measure:
 - invalid/unsafe action rate;
 - latency;
 - token/cost usage;
-- percentage of calls gated for low confidence.
+- percentage of calls gated for low selected-action probability.
 
 Keep the integration only if Jev materially improves routing quality at acceptable cost and latency.
 
@@ -167,3 +167,56 @@ ParamIntel deterministic core
 ```
 
 The interfaces stay separate because hypothesis generation and bounded decision selection are different jobs.
+
+
+## First live observations
+
+Two sanitized live runs against `jev-1.13.0` established useful initial behavior.
+
+### Already-verified finding
+
+State:
+
+```text
+visibility
+candidate 3/3
+control 0/3
+ParamIntel confidence 1.00
+remaining budget 18
+```
+
+Jev selected `stop`, with approximately:
+
+```text
+stop probability: 0.50
+related_value_profile: 0.20
+enum_profile: 0.18
+choice confidence: 0.42
+```
+
+This is directionally sensible: ParamIntel already had strong evidence, so additional characterization may not justify spending more requests.
+
+### Decision-needed enum case
+
+State:
+
+```text
+status
+candidate 0/3
+control 0/3
+observed structural clue: $.allowed_statuses
+remaining budget 18
+```
+
+Jev selected:
+
+```text
+enum_profile
+selected probability: 0.80
+choice confidence: 0.77
+stop probability: 0.11
+```
+
+This exposed an important spike-design correction: TypeSafe reports the winning label's probability separately from an overall confidence metric. The local gate now uses the selected label's probability as the action threshold, while retaining overall confidence for audit.
+
+These two cases are encouraging but are not sufficient for production graduation.
