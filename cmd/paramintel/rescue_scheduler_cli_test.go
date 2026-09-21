@@ -76,6 +76,9 @@ func TestCLIEvidenceGuidedRescueUsesContextWithoutAI(t *testing.T) {
 	if report.ValueAware.Budget != 8 || report.ValueAware.RequestsUsed != 8 {
 		t.Fatalf("value-aware summary=%+v", report.ValueAware)
 	}
+	if report.ValueAware.VerifiedRequests != 8 || report.ValueAware.MissRequests != 0 || report.ValueAware.BudgetExhaustedRequests != 0 {
+		t.Fatalf("request outcome accounting=%+v", report.ValueAware)
+	}
 	if report.ValueAware.CandidatesAttempted != 1 {
 		t.Fatalf("attempted=%d want=1 audit=%+v", report.ValueAware.CandidatesAttempted, report.ValueAware.CandidateAudit)
 	}
