@@ -10,9 +10,10 @@ import (
 )
 
 type semanticBudget struct {
-	remaining int
-	used      int
-	exhausted bool
+	remaining              int
+	used                   int
+	exhausted              bool
+	minActionableRemaining int
 }
 
 func newSemanticBudget(limit int) *semanticBudget {
@@ -20,6 +21,24 @@ func newSemanticBudget(limit int) *semanticBudget {
 		limit = 0
 	}
 	return &semanticBudget{remaining: limit, exhausted: limit == 0}
+}
+
+func (b *semanticBudget) requireVerifiableAttempt(trials int) {
+	if b == nil {
+		return
+	}
+	b.minActionableRemaining = 2 + 2*trials
+}
+
+func (b *semanticBudget) canStartValue() bool {
+	if b == nil || b.minActionableRemaining <= 0 {
+		return true
+	}
+	if b.remaining < b.minActionableRemaining {
+		b.exhausted = true
+		return false
+	}
+	return true
 }
 
 func (b *semanticBudget) reserve(requests int) bool {
@@ -58,6 +77,9 @@ func (e Engine) semanticRescueCandidateBudgeted(ctx context.Context, tmpl model.
 
 func (e Engine) semanticRescueValuesBudgeted(ctx context.Context, tmpl model.RequestTemplate, p model.BaselineProfile, candidate model.Candidate, values []model.ProbeValue, trials int, minConfidence float64, budget *semanticBudget) (model.ParameterResult, model.ProbeValue, bool, error) {
 	for _, value := range values {
+		if !budget.canStartValue() {
+			return model.ParameterResult{}, model.ProbeValue{}, false, nil
+		}
 		if !budget.reserve(1) {
 			return model.ParameterResult{}, model.ProbeValue{}, false, nil
 		}
