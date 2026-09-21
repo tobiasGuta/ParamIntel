@@ -56,6 +56,38 @@ func TestStateFromParameterResultSanitizesEvidenceValues(t *testing.T) {
 	}
 }
 
+func TestStateFromParameterResultSanitizesCandidateSources(t *testing.T) {
+	state := StateFromParameterResult(model.ParameterResult{
+		Name:     "region",
+		Location: model.LocationQuery,
+		CandidateSources: []model.CandidateSource{
+			{
+				Source:   "context_response_actionable_json_property",
+				Path:     "$.aliases.region",
+				Reason:   "SECRET-REASON",
+				SchemaRef: "SECRET-SCHEMA",
+			},
+		},
+	}, 8)
+
+	if len(state.Evidence.Kinds) != 1 || state.Evidence.Kinds[0] != "candidate_source:context_response_actionable_json_property" {
+		t.Fatalf("evidence kinds=%v", state.Evidence.Kinds)
+	}
+	if len(state.Evidence.Paths) != 1 || state.Evidence.Paths[0] != "$.aliases.region" {
+		t.Fatalf("evidence paths=%v", state.Evidence.Paths)
+	}
+
+	raw, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, secret := range []string{"SECRET-REASON", "SECRET-SCHEMA"} {
+		if strings.Contains(string(raw), secret) {
+			t.Fatalf("sanitized state leaked %q: %s", secret, raw)
+		}
+	}
+}
+
 func TestStateFromParameterResultDefaultsGenericProbeKindToString(t *testing.T) {
 	state := StateFromParameterResult(model.ParameterResult{
 		Name:     "theme",
@@ -102,7 +134,7 @@ func TestAppendShadowCaptureJSONLWritesSanitizedRecord(t *testing.T) {
 	if record.ID == "" {
 		t.Fatal("record ID is empty")
 	}
-	if record.Source != "paramintel_verified_parameter_pre_characterization" {
+	if record.Source != "paramintel_residual_pre_semantic_rescue" {
 		t.Fatalf("source=%q", record.Source)
 	}
 	if record.State.Candidate.Name != "sandbox" {
