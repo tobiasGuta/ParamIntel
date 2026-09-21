@@ -78,6 +78,19 @@ func TestValidateAIOptions(t *testing.T) {
 	if err := validateAIOptions(true, false, 1, 0, 0, 0); err == nil {
 		t.Fatal("zero AI timeout should be rejected")
 	}
+	if err := validateAIOptions(false, true, 0, 4, 8, time.Second); err != nil {
+		t.Fatalf("valid semantic value advisor options rejected: %v", err)
+	}
+	for _, valueBudget := range []int{0, 13} {
+		if err := validateAIOptions(false, true, 0, valueBudget, 8, time.Second); err == nil {
+			t.Fatalf("value budget=%d should be rejected", valueBudget)
+		}
+	}
+	for _, candidateBudget := range []int{0, 51} {
+		if err := validateAIOptions(false, true, 0, 4, candidateBudget, time.Second); err == nil {
+			t.Fatalf("value candidate budget=%d should be rejected", candidateBudget)
+		}
+	}
 }
 
 func TestValidateJSONScaffoldOptions(t *testing.T) {
