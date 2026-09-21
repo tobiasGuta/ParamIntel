@@ -189,12 +189,13 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 				}
 				position++
 				rank := rankRescueCandidate(candidate, cfg.SemanticValuePriority)
-				e.verbosef("    [%d] %s tier=%s source_priority=%d relevance=%d reason=%s\n",
+				e.verbosef("    [%d] %s tier=%s source_priority=%d relevance=%d screen_cost=%d reason=%s\n",
 					position,
 					fmtCandidate(candidate),
 					rank.tierLabel(),
 					rank.SourcePriority,
 					rank.ContextRelevance,
+					rank.EstimatedScreenCost,
 					rank.auditReason(),
 				)
 			}
