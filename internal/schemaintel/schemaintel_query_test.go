@@ -3,6 +3,7 @@ package schemaintel
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -365,6 +366,17 @@ func TestAnalyze_OAS321_Query_DepthLimits(t *testing.T) {
 	}
 }
 
+// countingLocalFS records attempted reads through libopenapi's configurable
+// filesystem. If the restricted parser ever touches it, the test fails.
+type countingLocalFS struct {
+	openCalls int64
+}
+
+func (f *countingLocalFS) Open(name string) (fs.File, error) {
+	atomic.AddInt64(&f.openCalls, 1)
+	return nil, fs.ErrPermission
+}
+
 func TestParse_RemoteAndExternalReferencesRemainDisabled(t *testing.T) {
 	// Local sentinel HTTP server to prove no outbound request is dispatched.
 	var sentinelHits int64
@@ -452,7 +464,11 @@ paths:
 		},
 	}
 
+	var existingFileSpec string
 	for _, tc := range specs {
+		if tc.name == "external_file_sentinel_existing" {
+			existingFileSpec = tc.yaml
+		}
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := Parse([]byte(tc.yaml))
 			if err == nil {
@@ -466,6 +482,25 @@ paths:
 
 	if hits := atomic.LoadInt64(&sentinelHits); hits != 0 {
 		t.Fatalf("sentinel HTTP server was hit %d times; remote references must be completely disabled", hits)
+	}
+
+	// The existing-file rejection proves the public Parse path fails closed.
+	// Also inject an observable fs.FS into the SAME parser/config constructor
+	// used by Parse, so any attempted filesystem Open fails this regression.
+	if existingFileSpec == "" {
+		t.Fatal("missing existing-file sentinel fixture")
+	}
+	tripwire := &countingLocalFS{}
+	cfg := newLocalOnlyDocumentConfig()
+	if cfg.AllowFileReferences || cfg.BasePath != "" || cfg.AllowRemoteReferences || cfg.BaseURL != nil {
+		t.Fatal("OpenAPI loader no longer uses a local-only reference policy")
+	}
+	cfg.LocalFS = tripwire
+	if _, err := parseWithConfig([]byte(existingFileSpec), cfg); err == nil {
+		t.Fatal("external file reference unexpectedly resolved with instrumented filesystem")
+	}
+	if opens := atomic.LoadInt64(&tripwire.openCalls); opens != 0 {
+		t.Fatalf("external reference attempted %d filesystem Open calls; want zero", opens)
 	}
 }
 
