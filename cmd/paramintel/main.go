@@ -156,11 +156,7 @@ func main() {
 		fatal(err)
 	}
 
-	client := &http.Client{
-		Timeout:       timeout,
-		Transport:     httppolicy.NewPacedTransport(http.DefaultTransport, delay),
-		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	client := newTargetHTTPClient(timeout, delay)
 	profile, baselineSnapshot, err := baseline.BuildWithSnapshot(ctx, client, tmpl, baselineN)
 	fatal(err)
 	if verbose {
@@ -394,6 +390,17 @@ func main() {
 		return
 	}
 	_, _ = os.Stdout.Write(b)
+}
+
+// newTargetHTTPClient is the outbound target client used by the CLI and its
+// integration tests. Never follow redirects: doing so could rewrite QUERY
+// requests to GET or forward captured request data to another destination.
+func newTargetHTTPClient(timeout, delay time.Duration) *http.Client {
+	return &http.Client{
+		Timeout:       timeout,
+		Transport:     httppolicy.NewPacedTransport(http.DefaultTransport, delay),
+		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
+	}
 }
 
 func validateDelay(delay time.Duration) error {

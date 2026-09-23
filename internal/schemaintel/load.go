@@ -1,7 +1,6 @@
 package schemaintel
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -16,24 +15,35 @@ type Document struct {
 }
 
 func Parse(data []byte) (*Document, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("openapi document is empty")
-	}
+	return parseWithConfig(data, newLocalOnlyDocumentConfig())
+}
 
+// newLocalOnlyDocumentConfig is the authoritative OpenAPI loading policy.
+func newLocalOnlyDocumentConfig() *datamodel.DocumentConfiguration {
 	cfg := datamodel.NewDocumentConfiguration()
 	cfg.AllowFileReferences = false
 	cfg.AllowRemoteReferences = false
 	cfg.BasePath = ""
 	cfg.BaseURL = nil
 	cfg.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	return cfg
+}
+
+// parseWithConfig shares the production parser with tests that inject a
+// filesystem tripwire. Parse always supplies the restricted configuration.
+func parseWithConfig(data []byte, cfg *datamodel.DocumentConfiguration) (*Document, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("openapi document is empty")
+	}
 
 	doc, err := libopenapi.NewDocumentWithConfiguration(data, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("parse openapi document: %w", err)
 	}
-	model, buildErrs := doc.BuildV3Model()
-	if len(buildErrs) > 0 {
-		return nil, fmt.Errorf("build openapi model: %w", errors.Join(buildErrs...))
+	// libopenapi v0.38.7+ changed BuildV3Model to return a single error instead of []error.
+	model, buildErr := doc.BuildV3Model()
+	if buildErr != nil {
+		return nil, fmt.Errorf("build openapi model: %w", buildErr)
 	}
 	if model == nil {
 		return nil, fmt.Errorf("build openapi model: no OpenAPI 3 model returned")

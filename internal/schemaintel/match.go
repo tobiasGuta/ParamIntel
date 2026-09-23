@@ -85,6 +85,13 @@ func operationForMethod(item *v3high.PathItem, method string) *v3high.Operation 
 		return item.Patch
 	case "TRACE":
 		return item.Trace
+	case "QUERY":
+		// RFC 10008 — The HTTP QUERY Method. Requires libopenapi ≥ v0.38.7
+		// which adds PathItem.Query *Operation for OpenAPI 3.2+ documents.
+		// The method-authorization gate in cmd/paramintel/main.go classifies
+		// QUERY as state-changing (default: requires -allow-state-changing) until
+		// a separate policy review explicitly reclassifies it as safe.
+		return item.Query
 	default:
 		return nil
 	}
