@@ -1,7 +1,6 @@
 package schemaintel
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -31,9 +30,10 @@ func Parse(data []byte) (*Document, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse openapi document: %w", err)
 	}
-	model, buildErrs := doc.BuildV3Model()
-	if len(buildErrs) > 0 {
-		return nil, fmt.Errorf("build openapi model: %w", errors.Join(buildErrs...))
+	// libopenapi v0.38.7+ changed BuildV3Model to return a single error instead of []error.
+	model, buildErr := doc.BuildV3Model()
+	if buildErr != nil {
+		return nil, fmt.Errorf("build openapi model: %w", buildErr)
 	}
 	if model == nil {
 		return nil, fmt.Errorf("build openapi model: no OpenAPI 3 model returned")
