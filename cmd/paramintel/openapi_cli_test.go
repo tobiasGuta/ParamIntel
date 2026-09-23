@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tobiasGuta/ParamIntel/internal/httppolicy"
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 	"github.com/tobiasGuta/ParamIntel/internal/schemaintel"
 )
@@ -522,12 +521,8 @@ func TestProductionClient_QueryRedirectPreservesMethodAndDoesNotForward(t *testi
 	}))
 	defer redirectSrv.Close()
 
-	// Exact production client setup from cmd/paramintel/main.go
-	client := &http.Client{
-		Timeout:       15 * time.Second,
-		Transport:     httppolicy.NewPacedTransport(http.DefaultTransport, 0),
-		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	// Use the same constructor invoked by main, so production policy changes are tested.
+	client := newTargetHTTPClient(15*time.Second, 0)
 
 	bodyStr := `{"filter":"test_term"}`
 	req, err := http.NewRequest("QUERY", redirectSrv.URL+"/search", strings.NewReader(bodyStr))
@@ -577,10 +572,7 @@ func TestProductionClient_QueryPacingEnforced(t *testing.T) {
 	defer srv.Close()
 
 	delay := 30 * time.Millisecond
-	client := &http.Client{
-		Transport:     httppolicy.NewPacedTransport(http.DefaultTransport, delay),
-		CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse },
-	}
+	client := newTargetHTTPClient(15*time.Second, delay)
 
 	for i := 0; i < 3; i++ {
 		req, _ := http.NewRequest("QUERY", srv.URL+"/search", strings.NewReader(`{"filter":"pacing"}`))
