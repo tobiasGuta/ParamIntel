@@ -210,7 +210,6 @@ paths:
                             readOnly: true
 `
 
-
 func TestCLIOpenAPIBodylessGETUsesResponseIntelligenceOnly(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -605,4 +604,3 @@ func TestProductionClient_QueryPacingEnforced(t *testing.T) {
 		t.Fatalf("interval between req 1 and 2 was %v; want at least %v", diff2, delay)
 	}
 }
-

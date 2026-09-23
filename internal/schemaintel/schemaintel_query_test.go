@@ -2,8 +2,13 @@ package schemaintel
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/tobiasGuta/ParamIntel/internal/model"
@@ -361,6 +366,22 @@ func TestAnalyze_OAS321_Query_DepthLimits(t *testing.T) {
 }
 
 func TestParse_RemoteAndExternalReferencesRemainDisabled(t *testing.T) {
+	// Local sentinel HTTP server to prove no outbound request is dispatched.
+	var sentinelHits int64
+	sentinelServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&sentinelHits, 1)
+		w.Header().Set("Content-Type", "application/yaml")
+		_, _ = w.Write([]byte("components:\n  schemas:\n    Query:\n      type: object\n"))
+	}))
+	defer sentinelServer.Close()
+
+	// Local sentinel file fixture to prove external-file reference is rejected even when the file exists.
+	sentinelDir := t.TempDir()
+	sentinelFilePath := filepath.Join(sentinelDir, "sentinel.yaml")
+	if err := os.WriteFile(sentinelFilePath, []byte("components:\n  schemas:\n    Query:\n      type: object\n"), 0600); err != nil {
+		t.Fatalf("write sentinel file: %v", err)
+	}
+
 	specs := []struct {
 		name string
 		yaml string
@@ -382,7 +403,23 @@ paths:
 `,
 		},
 		{
-			name: "external_file",
+			name: "remote_sentinel_http_server",
+			yaml: fmt.Sprintf(`openapi: 3.2.1
+info: {title: remote-sentinel, version: "1"}
+paths:
+  /test:
+    query:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '%s/remote.yaml#/components/schemas/Query'
+      responses:
+        '200': {description: ok}
+`, sentinelServer.URL),
+		},
+		{
+			name: "external_file_nonexistent",
 			yaml: `openapi: 3.2.1
 info: {title: file, version: "1"}
 paths:
@@ -397,6 +434,22 @@ paths:
         '200': {description: ok}
 `,
 		},
+		{
+			name: "external_file_sentinel_existing",
+			yaml: fmt.Sprintf(`openapi: 3.2.1
+info: {title: file-sentinel, version: "1"}
+paths:
+  /test:
+    query:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '%s#/components/schemas/Query'
+      responses:
+        '200': {description: ok}
+`, filepath.ToSlash(sentinelFilePath)),
+		},
 	}
 
 	for _, tc := range specs {
@@ -409,6 +462,10 @@ paths:
 				t.Fatalf("%s: unexpected error message: %v", tc.name, err)
 			}
 		})
+	}
+
+	if hits := atomic.LoadInt64(&sentinelHits); hits != 0 {
+		t.Fatalf("sentinel HTTP server was hit %d times; remote references must be completely disabled", hits)
 	}
 }
 
