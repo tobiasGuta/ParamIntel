@@ -15,16 +15,26 @@ type Document struct {
 }
 
 func Parse(data []byte) (*Document, error) {
-	if len(data) == 0 {
-		return nil, fmt.Errorf("openapi document is empty")
-	}
+	return parseWithConfig(data, newLocalOnlyDocumentConfig())
+}
 
+// newLocalOnlyDocumentConfig is the authoritative OpenAPI loading policy.
+func newLocalOnlyDocumentConfig() *datamodel.DocumentConfiguration {
 	cfg := datamodel.NewDocumentConfiguration()
 	cfg.AllowFileReferences = false
 	cfg.AllowRemoteReferences = false
 	cfg.BasePath = ""
 	cfg.BaseURL = nil
 	cfg.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	return cfg
+}
+
+// parseWithConfig shares the production parser with tests that inject a
+// filesystem tripwire. Parse always supplies the restricted configuration.
+func parseWithConfig(data []byte, cfg *datamodel.DocumentConfiguration) (*Document, error) {
+	if len(data) == 0 {
+		return nil, fmt.Errorf("openapi document is empty")
+	}
 
 	doc, err := libopenapi.NewDocumentWithConfiguration(data, cfg)
 	if err != nil {
