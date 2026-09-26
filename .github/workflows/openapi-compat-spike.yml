@@ -33,6 +33,23 @@ jobs:
           go mod edit -require=github.com/pb33f/libopenapi@v0.38.7
           go mod tidy
           go list -m github.com/pb33f/libopenapi
+      - name: Apply v0.38 error-API shim only in runner
+        if: matrix.dependency == 'candidate-v0.38.7'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("internal/schemaintel/load.go")
+          source = p.read_text()
+          old = '''\tif len(buildErrs) > 0 {
+\t\treturn nil, fmt.Errorf("build openapi model: %w", errors.Join(buildErrs...))
+\t}'''
+          new = '''\tif buildErrs != nil {
+\t\treturn nil, fmt.Errorf("build openapi model: %w", buildErrs)
+\t}'''
+          assert old in source, "migration shim did not match inspected production code"
+          source = source.replace(old, new).replace('\t"errors"\n', '')
+          p.write_text(source)
+          PY
       - name: Compatibility observations
         shell: bash
         run: |
