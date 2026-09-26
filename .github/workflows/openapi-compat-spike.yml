@@ -41,11 +41,11 @@ jobs:
           p = Path("internal/schemaintel/load.go")
           source = p.read_text()
           old = '''\tif len(buildErrs) > 0 {
-\t\treturn nil, fmt.Errorf("build openapi model: %w", errors.Join(buildErrs...))
-\t}'''
+          \t\treturn nil, fmt.Errorf("build openapi model: %w", errors.Join(buildErrs...))
+          \t}'''
           new = '''\tif buildErrs != nil {
-\t\treturn nil, fmt.Errorf("build openapi model: %w", buildErrs)
-\t}'''
+          \t\treturn nil, fmt.Errorf("build openapi model: %w", buildErrs)
+          \t}'''
           assert old in source, "migration shim did not match inspected production code"
           source = source.replace(old, new).replace('\t"errors"\n', '')
           p.write_text(source)
