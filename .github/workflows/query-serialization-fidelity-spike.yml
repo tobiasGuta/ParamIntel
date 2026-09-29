@@ -30,41 +30,9 @@ jobs:
         shell: bash
         run: |
           set +e
-          go test -tags=queryfidelityspike ./internal/mutate -run '^(TestQuerySerializationFidelitySpike|TestQueryProbeEncodingMatchesOASFormExamplePrimitive)      - name: Record expected research outcome
-        shell: bash
-        run: |
-          echo "assertion_outcome=${{ steps.spike.outcome }}"
-          if [[ "${{ steps.spike.outcome }}" == "failure" ]]; then
-            echo "The strict raw-wire fidelity invariant was violated; inspect QUERY_FIDELITY_JSON observations."
-          else
-            echo "The tested strict raw-wire fidelity invariant held."
-          fi
-      - name: Upload observations
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: query-fidelity-go-${{ matrix.go }}
-          path: ${{ runner.temp }}/query-fidelity.log
-          if-no-files-found: error
- -count=1 -v 2>&1 | tee "${RUNNER_TEMP}/query-fidelity.log"
+          go test -tags=queryfidelityspike ./internal/mutate -run '^(TestQuerySerializationFidelitySpike|TestQueryProbeEncodingMatchesOASFormExamplePrimitive)$' -count=1 -v 2>&1 | tee "${RUNNER_TEMP}/query-fidelity.log"
           mutate_status=${PIPESTATUS[0]}
-          go test -tags=queryfidelityspike ./cmd/paramintel -run '^TestOpenAPIQuerystringOperationDoesNotFallThroughToGenericQueryDiscovery      - name: Record expected research outcome
-        shell: bash
-        run: |
-          echo "assertion_outcome=${{ steps.spike.outcome }}"
-          if [[ "${{ steps.spike.outcome }}" == "failure" ]]; then
-            echo "The strict raw-wire fidelity invariant was violated; inspect QUERY_FIDELITY_JSON observations."
-          else
-            echo "The tested strict raw-wire fidelity invariant held."
-          fi
-      - name: Upload observations
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: query-fidelity-go-${{ matrix.go }}
-          path: ${{ runner.temp }}/query-fidelity.log
-          if-no-files-found: error
- -count=1 -v 2>&1 | tee -a "${RUNNER_TEMP}/query-fidelity.log"
+          go test -tags=queryfidelityspike ./cmd/paramintel -run '^TestOpenAPIQuerystringOperationDoesNotFallThroughToGenericQueryDiscovery$' -count=1 -v 2>&1 | tee -a "${RUNNER_TEMP}/query-fidelity.log"
           integration_status=${PIPESTATUS[0]}
           if [[ $mutate_status -ne 0 || $integration_status -ne 0 ]]; then
             exit 1
@@ -74,9 +42,9 @@ jobs:
         run: |
           echo "assertion_outcome=${{ steps.spike.outcome }}"
           if [[ "${{ steps.spike.outcome }}" == "failure" ]]; then
-            echo "The strict raw-wire fidelity invariant was violated; inspect QUERY_FIDELITY_JSON observations."
+            echo "At least one strict research assertion failed; inspect QUERY_FIDELITY_JSON and QUERYSTRING_OPERATION_JSON observations."
           else
-            echo "The tested strict raw-wire fidelity invariant held."
+            echo "All tested strict serialization-fidelity invariants held."
           fi
       - name: Upload observations
         if: always()
