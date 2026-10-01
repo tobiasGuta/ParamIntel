@@ -92,6 +92,12 @@ func GenerateValues(ctx context.Context, provider Provider, input ValueInput, li
 	}, nil
 }
 
+// AcceptValueSuggestions applies the same local typed-value admission rules
+// used for provider output to externally supplied semantic value hypotheses.
+func AcceptValueSuggestions(input ValueInput, suggestions []ValueSuggestion, limit int) ([]model.ProbeValue, []ValueSuggestionAudit) {
+	return evaluateValueSuggestions(input, suggestions, limit)
+}
+
 func evaluateValueSuggestions(input ValueInput, suggestions []ValueSuggestion, limit int) ([]model.ProbeValue, []ValueSuggestionAudit) {
 	if limit <= 0 {
 		return nil, nil
