@@ -42,8 +42,14 @@ jobs:
       - name: Build
         run: go build -trimpath -o paramintel ./cmd/paramintel
 
+      - name: Build MCP server
+        run: go build -trimpath -o paramintel-mcp ./cmd/paramintel-mcp
+
       - name: Windows cross-build
         run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o paramintel-windows-amd64.exe ./cmd/paramintel
+
+      - name: Windows MCP cross-build
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o paramintel-mcp-windows-amd64.exe ./cmd/paramintel-mcp
 
   json-evidence-compat:
     name: JSON evidence (${{ matrix.label }})
