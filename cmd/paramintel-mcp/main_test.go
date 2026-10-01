@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -161,5 +162,80 @@ func TestNormalizeMCPOptions(t *testing.T) {
 func TestMCPToolSchemasConstruct(t *testing.T) {
 	if server := newMCPServer(); server == nil {
 		t.Fatal("newMCPServer returned nil")
+	}
+}
+
+
+func TestAnalyzeRequestFileUsesExternalHintsWithoutInternalAIFlags(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake CLI uses a POSIX shell")
+	}
+
+	root := t.TempDir()
+	requestPath := filepath.Join(root, "request.txt")
+	if err := os.WriteFile(requestPath, []byte("GET /api/users HTTP/1.1\r\nHost: example.test\r\n\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fakeCLI := filepath.Join(root, "fake-paramintel")
+	script := `#!/bin/sh
+out=""
+hints=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -ai-advisor|-ai-value-advisor|-ai-provider|-ai-model|-ai-api-key-env)
+      exit 42
+      ;;
+    -output)
+      out="$2"
+      shift 2
+      ;;
+    -hints)
+      hints="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+[ -n "$out" ] || exit 43
+[ -f "$hints" ] || exit 44
+grep -q '"role"' "$hints" || exit 45
+cat > "$out" <<'EOF'
+{"version":"test","target":"https://example.test/api/users","method":"GET","baseline":{"samples":1,"stable_json_paths":0,"body_len_min":2,"body_len_max":2},"parameters":[]}
+EOF
+`
+	if err := os.WriteFile(fakeCLI, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PARAMINTEL_MCP_REQUEST_ROOT", root)
+	t.Setenv("PARAMINTEL_MCP_BIN", fakeCLI)
+
+	_, out, err := analyzeRequestFile(context.Background(), nil, analyzeRequestInput{
+		RequestPath: "request.txt",
+		Hints: externalhints.Document{
+			Candidates: []externalhints.CandidateHint{{
+				Name:     "role",
+				Location: "query",
+				Values: []externalhints.ValueHint{{
+					Value: "admin",
+					Kind:  "string",
+				}},
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.InternalAIUsed {
+		t.Fatal("MCP analysis unexpectedly reported internal AI use")
+	}
+	if out.HintSource != externalhints.SourceExternalSemanticHint {
+		t.Fatalf("hint source=%q", out.HintSource)
+	}
+	if out.Report.Version != "test" {
+		t.Fatalf("report=%+v", out.Report)
 	}
 }
