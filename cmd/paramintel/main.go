@@ -15,6 +15,7 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/candidates"
 	"github.com/tobiasGuta/ParamIntel/internal/contextintel"
 	"github.com/tobiasGuta/ParamIntel/internal/discovery"
+	"github.com/tobiasGuta/ParamIntel/internal/externalhints"
 	"github.com/tobiasGuta/ParamIntel/internal/httppolicy"
 	"github.com/tobiasGuta/ParamIntel/internal/httpraw"
 	"github.com/tobiasGuta/ParamIntel/internal/model"
@@ -27,7 +28,7 @@ const (
 )
 
 func main() {
-	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath, openAPIPath string
+	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath, openAPIPath, hintsPath string
 	var aiProviderName, aiModel, aiAPIKeyEnv, aiContextResponsePath string
 	var baselineN, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget int
 	var timeout, delay, aiTimeout time.Duration
@@ -36,6 +37,7 @@ func main() {
 
 	flag.StringVar(&reqPath, "request", "", "raw HTTP request file (required)")
 	flag.StringVar(&wordPath, "wordlist", "", "optional parameter wordlist")
+	flag.StringVar(&hintsPath, "hints", "", "optional JSON semantic hints from a human or external agent; hints are hypotheses and still require normal verification")
 	flag.StringVar(&contextResponsePath, "context-response", "", "optional related raw HTTP response or JSON body used to derive high-signal JSON candidates")
 	flag.BoolVar(&jsonScaffold, "json-scaffold", false, "allow one-level response-derived JSON parent scaffolding from -context-response candidates")
 	flag.StringVar(&openAPIPath, "openapi", "", "optional local OpenAPI 3.x document used to derive deterministic JSON candidates")
@@ -108,6 +110,31 @@ func main() {
 	fatal(err)
 
 	var seeded []model.Candidate
+	var externalHintDoc *externalhints.Document
+	if strings.TrimSpace(hintsPath) != "" {
+		doc, err := externalhints.Load(hintsPath)
+		fatal(err)
+		hintInput, err := aiadvisor.BuildInput(tmpl, nil, locations, jsonDepth)
+		fatal(err)
+		admission := doc.AdmitCandidates(hintInput, words, externalhints.MaxCandidates)
+		seeded = append(seeded, admission.Candidates...)
+		externalHintDoc = &doc
+		if verbose {
+			rejected := 0
+			for _, item := range admission.Audit {
+				if item.Admission == aiadvisor.AdmissionRejected {
+					rejected++
+				}
+			}
+			fmt.Printf("[*] External semantic hints\n")
+			fmt.Printf("    context tags: %d\n", len(doc.Context))
+			fmt.Printf("    suggested candidates: %d\n", len(doc.Candidates))
+			fmt.Printf("    accepted candidate hypotheses: %d\n", len(admission.Candidates))
+			fmt.Printf("    locally rejected candidate hypotheses: %d\n", rejected)
+			fmt.Printf("    provider calls: 0\n")
+		}
+	}
+
 	var contextRaw []byte
 	if contextResponsePath != "" {
 		contextRaw, err = os.ReadFile(contextResponsePath)
@@ -252,6 +279,18 @@ func main() {
 	}
 
 	var semanticValueAdvisor discovery.SemanticValueAdvisor
+	var semanticValueEligibility discovery.SemanticValueEligibility
+	if externalHintDoc != nil {
+		doc := *externalHintDoc
+		semanticValueAdvisor = func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (discovery.SemanticValueAdvice, error) {
+			admission := doc.ValuesFor(candidate, deterministic, externalhints.MaxValuesPerCandidate)
+			return discovery.SemanticValueAdvice{
+				Values: admission.Values,
+				Source: discovery.SemanticValueSourceExternalHint,
+			}, nil
+		}
+		semanticValueEligibility = doc.HasValuesFor
+	}
 	if aiValueAdvisorEnabled {
 		aiValueSummary = &model.AIValueAdvisorSummary{
 			Provider:      aiProvider.Name(),
@@ -260,7 +299,7 @@ func main() {
 			ContextSource: aiContextSource,
 		}
 		remainingCandidates := aiValueCandidateBudget
-		semanticValueAdvisor = func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (discovery.SemanticValueAdvice, error) {
+		aiSemanticValueAdvisor := func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (discovery.SemanticValueAdvice, error) {
 			if remainingCandidates <= 0 {
 				return discovery.SemanticValueAdvice{}, nil
 			}
@@ -301,8 +340,23 @@ func main() {
 					fmt.Printf("\n")
 				}
 			}
-			return discovery.SemanticValueAdvice{Values: result.Values, Queried: true}, nil
+			return discovery.SemanticValueAdvice{Values: result.Values, Queried: true, Source: discovery.SemanticValueSourceAI}, nil
 		}
+		if semanticValueAdvisor == nil {
+			semanticValueAdvisor = aiSemanticValueAdvisor
+		} else {
+			externalAdvisor := semanticValueAdvisor
+			semanticValueAdvisor = func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (discovery.SemanticValueAdvice, error) {
+				advice, err := externalAdvisor(ctx, candidate, deterministic)
+				if err != nil || len(advice.Values) > 0 {
+					return advice, err
+				}
+				return aiSemanticValueAdvisor(ctx, candidate, deterministic)
+			}
+		}
+		// Internal AI remains a fallback for candidates not covered by external
+		// hints, so eligibility cannot be restricted to the external document.
+		semanticValueEligibility = nil
 	}
 
 	var rescueAudits []model.RescueCandidateAudit
@@ -330,8 +384,9 @@ func main() {
 		ValueAware:           valueAware,
 		ValueAwareBudget:     valueAwareBudget,
 		EvidenceGuidedRescue: true,
-		SemanticValueAdvisor:  semanticValueAdvisor,
-		SemanticValuePriority: semanticValuePriority,
+		SemanticValueAdvisor:    semanticValueAdvisor,
+		SemanticValueEligibility: semanticValueEligibility,
+		SemanticValuePriority:   semanticValuePriority,
 		RescuePlanObserver:    rescuePlanObserver,
 		RescueAuditObserver:   rescueAuditObserver,
 		JSONScaffold:          jsonScaffold,
