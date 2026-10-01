@@ -241,6 +241,8 @@ type RescueCandidateAudit struct {
 	DeterministicValues int    `json:"deterministic_values"`
 	AIQueried           bool   `json:"ai_queried"`
 	AIValues            int    `json:"ai_values"`
+	SemanticSource      string `json:"semantic_source,omitempty"`
+	SemanticValues      int    `json:"semantic_values,omitempty"`
 	BudgetBefore        int    `json:"budget_before"`
 	BudgetAfter         int    `json:"budget_after"`
 	RequestsUsed        int    `json:"requests_used"`
