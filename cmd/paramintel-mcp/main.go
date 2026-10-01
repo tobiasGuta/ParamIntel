@@ -215,7 +215,11 @@ func resolveRequestPath(requestPath string) (string, error) {
 		return "", fmt.Errorf("configured MCP request root is not a directory")
 	}
 
-	pathAbs, err := filepath.Abs(requestPath)
+	pathAbs := requestPath
+	if !filepath.IsAbs(pathAbs) {
+		pathAbs = filepath.Join(rootReal, pathAbs)
+	}
+	pathAbs, err = filepath.Abs(pathAbs)
 	if err != nil {
 		return "", fmt.Errorf("resolve request_path: %w", err)
 	}
@@ -311,7 +315,7 @@ func boundedDiagnostic(value string) string {
 	return value
 }
 
-func main() {
+func newMCPServer() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "paramintel",
 		Version: mcpServerVersion,
@@ -327,7 +331,11 @@ func main() {
 		Description: "Run ParamIntel against an authorized raw HTTP request using externally supplied semantic parameter/value hypotheses. The hints are never treated as findings: ParamIntel still performs its normal live verification, repeated trials, paired random-name controls, confidence checks, and evidence collection. This tool sends HTTP requests to the captured target.",
 	}, analyzeRequestFile)
 
-	if err := server.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+	return server
+}
+
+func main() {
+	if err := newMCPServer().Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 		log.Fatal(err)
 	}
 }
