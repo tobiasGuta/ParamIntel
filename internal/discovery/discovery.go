@@ -23,6 +23,7 @@ type SemanticValueAdvice struct {
 }
 
 type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (SemanticValueAdvice, error)
+type SemanticValueEligibility func(candidate model.Candidate) bool
 type SemanticValuePriority func(candidate model.Candidate) int
 type RescuePlanObserver func(eligibleCandidates, budget int)
 type RescueAuditObserver func(model.RescueCandidateAudit)
@@ -39,8 +40,9 @@ type Config struct {
 	ValueAware           bool
 	ValueAwareBudget     int
 	EvidenceGuidedRescue bool
-	SemanticValueAdvisor  SemanticValueAdvisor
-	SemanticValuePriority SemanticValuePriority
+	SemanticValueAdvisor    SemanticValueAdvisor
+	SemanticValueEligibility SemanticValueEligibility
+	SemanticValuePriority   SemanticValuePriority
 	RescuePlanObserver    RescuePlanObserver
 	RescueAuditObserver   RescueAuditObserver
 	JSONScaffold          bool
@@ -164,7 +166,9 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			if _, ok := rescueExcluded[key]; ok {
 				continue
 			}
-			if len(semantics.ProfileValues(candidate.Name, candidate.Location)) == 0 && cfg.SemanticValueAdvisor == nil {
+			deterministicValues := semantics.ProfileValues(candidate.Name, candidate.Location)
+			advisorEligible := cfg.SemanticValueAdvisor != nil && (cfg.SemanticValueEligibility == nil || cfg.SemanticValueEligibility(candidate))
+			if len(deterministicValues) == 0 && !advisorEligible {
 				continue
 			}
 			eligible++
@@ -201,7 +205,8 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 					continue
 				}
 				deterministicValues := semantics.ProfileValues(candidate.Name, candidate.Location)
-				if len(deterministicValues) == 0 && cfg.SemanticValueAdvisor == nil {
+				advisorEligible := cfg.SemanticValueAdvisor != nil && (cfg.SemanticValueEligibility == nil || cfg.SemanticValueEligibility(candidate))
+				if len(deterministicValues) == 0 && !advisorEligible {
 					continue
 				}
 				position++
@@ -230,7 +235,8 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 				continue
 			}
 			deterministicValues := semantics.ProfileValues(candidate.Name, candidate.Location)
-			if len(deterministicValues) == 0 && cfg.SemanticValueAdvisor == nil {
+			advisorEligible := cfg.SemanticValueAdvisor != nil && (cfg.SemanticValueEligibility == nil || cfg.SemanticValueEligibility(candidate))
+			if len(deterministicValues) == 0 && !advisorEligible {
 				continue
 			}
 
@@ -247,7 +253,7 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 				return nil, err
 			}
 			discoveryMode := "value_aware"
-			if !ok && cfg.SemanticValueAdvisor != nil && !budget.exhausted {
+			if !ok && advisorEligible && !budget.exhausted {
 				advice, err := cfg.SemanticValueAdvisor(ctx, candidate, deterministicValues)
 				if err != nil {
 					return nil, err
