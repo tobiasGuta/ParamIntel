@@ -54,7 +54,13 @@ type ValueAdmission struct {
 }
 
 func Load(path string) (Document, error) {
-	raw, err := os.ReadFile(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return Document{}, err
+	}
+	defer f.Close()
+
+	raw, err := io.ReadAll(io.LimitReader(f, MaxDocumentBytes+1))
 	if err != nil {
 		return Document{}, err
 	}
