@@ -110,6 +110,7 @@ func main() {
 	fatal(err)
 
 	var seeded []model.Candidate
+	var externalHintSeeds []model.Candidate
 	var externalHintDoc *externalhints.Document
 	if strings.TrimSpace(hintsPath) != "" {
 		doc, err := externalhints.Load(hintsPath)
@@ -117,7 +118,7 @@ func main() {
 		hintInput, err := aiadvisor.BuildInput(tmpl, nil, locations, jsonDepth)
 		fatal(err)
 		admission := doc.AdmitCandidates(hintInput, words, externalhints.MaxCandidates)
-		seeded = append(seeded, admission.Candidates...)
+		externalHintSeeds = append(externalHintSeeds, admission.Candidates...)
 		externalHintDoc = &doc
 		if verbose {
 			rejected := 0
@@ -240,6 +241,12 @@ func main() {
 			fmt.Printf("    skipped schema properties: %d\n", len(openAPIReport.Skipped))
 		}
 	}
+
+	// Deterministic application evidence is seeded before externally supplied
+	// hypotheses so a duplicate context/OpenAPI candidate keeps its stronger
+	// deterministic provenance. External value hints remain available even when
+	// the external candidate name is already covered locally.
+	seeded = append(seeded, externalHintSeeds...)
 
 	var aiSummary *model.AIAdvisorSummary
 	var aiValueSummary *model.AIValueAdvisorSummary
