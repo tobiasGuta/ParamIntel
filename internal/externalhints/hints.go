@@ -131,6 +131,11 @@ func (d Document) AdmitCandidates(input aiadvisor.Input, deterministicNames []st
 	return CandidateAdmission{Candidates: candidates, Audit: audit}
 }
 
+func (d Document) HasValuesFor(candidate model.Candidate) bool {
+	hint, ok := d.findCandidate(candidate)
+	return ok && len(hint.Values) > 0
+}
+
 func (d Document) ValuesFor(candidate model.Candidate, deterministic []model.ProbeValue, limit int) ValueAdmission {
 	if limit <= 0 || limit > MaxValuesPerCandidate {
 		limit = MaxValuesPerCandidate
