@@ -33,6 +33,13 @@ func TestResolveRequestPathConfinesReadsToConfiguredRoot(t *testing.T) {
 	if got == "" {
 		t.Fatal("resolved path is empty")
 	}
+	relative, err := resolveRequestPath("inside.req")
+	if err != nil {
+		t.Fatalf("relative request rejected: %v", err)
+	}
+	if relative != got {
+		t.Fatalf("relative path resolved to %q, want %q", relative, got)
+	}
 	if _, err := resolveRequestPath(outside); err == nil || !strings.Contains(err.Error(), "outside the configured MCP request root") {
 		t.Fatalf("outside request error=%v", err)
 	}
@@ -147,5 +154,12 @@ func TestNormalizeMCPOptions(t *testing.T) {
 	}
 	if _, err := normalizeLocations([]string{"header"}); err == nil {
 		t.Fatal("expected invalid location rejection")
+	}
+}
+
+
+func TestMCPToolSchemasConstruct(t *testing.T) {
+	if server := newMCPServer(); server == nil {
+		t.Fatal("newMCPServer returned nil")
 	}
 }
