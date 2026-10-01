@@ -11,9 +11,15 @@ import (
 	"github.com/tobiasGuta/ParamIntel/internal/semantics"
 )
 
+const (
+	SemanticValueSourceAI           = "ai"
+	SemanticValueSourceExternalHint = "external_hint"
+)
+
 type SemanticValueAdvice struct {
 	Values  []model.ProbeValue
 	Queried bool
+	Source  string
 }
 
 type SemanticValueAdvisor func(ctx context.Context, candidate model.Candidate, deterministic []model.ProbeValue) (SemanticValueAdvice, error)
@@ -233,6 +239,8 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			usedBefore := budget.used
 			aiQueried := false
 			aiValueCount := 0
+			semanticSource := ""
+			semanticValueCount := 0
 
 			r, value, ok, err := e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, deterministicValues, cfg.Trials, cfg.MinConfidence, budget)
 			if err != nil {
@@ -244,14 +252,26 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 				if err != nil {
 					return nil, err
 				}
-				aiQueried = advice.Queried
-				aiValueCount = len(advice.Values)
+				semanticSource = strings.ToLower(strings.TrimSpace(advice.Source))
+				if semanticSource == "" && advice.Queried {
+					semanticSource = SemanticValueSourceAI
+				}
+				semanticValueCount = len(advice.Values)
+				if semanticSource == SemanticValueSourceAI {
+					aiQueried = advice.Queried
+					aiValueCount = len(advice.Values)
+				}
 				if len(advice.Values) > 0 {
 					r, value, ok, err = e.semanticRescueValuesBudgeted(ctx, tmpl, profile, candidate, advice.Values, cfg.Trials, cfg.MinConfidence, budget)
 					if err != nil {
 						return nil, err
 					}
-					discoveryMode = "ai_value_aware"
+					switch semanticSource {
+					case SemanticValueSourceExternalHint:
+						discoveryMode = "external_value_hint"
+					default:
+						discoveryMode = "ai_value_aware"
+					}
 				}
 			}
 
@@ -274,6 +294,8 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 				DeterministicValues: len(deterministicValues),
 				AIQueried:           aiQueried,
 				AIValues:            aiValueCount,
+				SemanticSource:      semanticSource,
+				SemanticValues:      semanticValueCount,
 				BudgetBefore:        budgetBefore,
 				BudgetAfter:         budget.remaining,
 				RequestsUsed:        budget.used - usedBefore,
@@ -285,13 +307,14 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 			if cfg.RescueAuditObserver != nil {
 				cfg.RescueAuditObserver(audit)
 			}
-			e.verbosef("    rescue audit: %s tier=%s requests=%d budget=%d->%d outcome=%s ai_queried=%t\n",
+			e.verbosef("    rescue audit: %s tier=%s requests=%d budget=%d->%d outcome=%s semantic_source=%s ai_queried=%t\n",
 				fmtCandidate(candidate),
 				audit.EvidenceTier,
 				audit.RequestsUsed,
 				audit.BudgetBefore,
 				audit.BudgetAfter,
 				audit.Outcome,
+				audit.SemanticSource,
 				audit.AIQueried,
 			)
 
@@ -360,6 +383,8 @@ func (e Engine) logVerification(r model.ParameterResult, accepted bool, minConfi
 		e.verbosef("    discovery: value-aware using %q (%s)\n", r.DiscoveryValue, r.DiscoveryValueKind)
 	case "ai_value_aware":
 		e.verbosef("    discovery: AI semantic value using %q (%s)\n", r.DiscoveryValue, r.DiscoveryValueKind)
+	case "external_value_hint":
+		e.verbosef("    discovery: external semantic value hint using %q (%s)\n", r.DiscoveryValue, r.DiscoveryValueKind)
 	case "schema_typed":
 		e.verbosef("    discovery: schema-typed using %q (%s)\n", r.DiscoveryValue, r.DiscoveryValueKind)
 	}
