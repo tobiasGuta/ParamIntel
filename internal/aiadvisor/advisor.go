@@ -69,7 +69,7 @@ func Generate(ctx context.Context, provider Provider, input Input, limit int) (R
 	if err != nil {
 		return Result{}, err
 	}
-	candidates, audit := evaluateSuggestions(input, suggestions, limit)
+	candidates, audit := evaluateSuggestions(input, suggestions, limit, SourceAISemanticHypothesis)
 	return Result{
 		Provider:       provider.Name(),
 		Model:          provider.Model(),
@@ -83,15 +83,26 @@ func Generate(ctx context.Context, provider Provider, input Input, limit int) (R
 // AcceptSuggestions preserves the original candidate-only helper for callers
 // that do not need admission audit details.
 func AcceptSuggestions(input Input, suggestions []Suggestion, limit int) []model.Candidate {
-	candidates, _ := evaluateSuggestions(input, suggestions, limit)
+	candidates, _ := evaluateSuggestions(input, suggestions, limit, SourceAISemanticHypothesis)
 	return candidates
+}
+
+// AcceptSuggestionsWithSource applies the exact same deterministic admission
+// policy used for AI provider output, while preserving an explicit provenance
+// source for hypotheses supplied by a human, MCP client, or another tool.
+func AcceptSuggestionsWithSource(input Input, suggestions []Suggestion, limit int, source string) ([]model.Candidate, []SuggestionAudit) {
+	source = strings.TrimSpace(source)
+	if source == "" {
+		source = SourceAISemanticHypothesis
+	}
+	return evaluateSuggestions(input, suggestions, limit, source)
 }
 
 // evaluateSuggestions validates all model output against deterministic local
 // constraints before it is allowed to enter the discovery candidate queue. It
 // retains one bounded audit record per provider suggestion so rejected model
 // output remains observable without becoming discovery evidence.
-func evaluateSuggestions(input Input, suggestions []Suggestion, limit int) ([]model.Candidate, []SuggestionAudit) {
+func evaluateSuggestions(input Input, suggestions []Suggestion, limit int, source string) ([]model.Candidate, []SuggestionAudit) {
 	if limit <= 0 {
 		return nil, nil
 	}
@@ -182,7 +193,7 @@ func evaluateSuggestions(input Input, suggestions []Suggestion, limit int) ([]mo
 			Location:   location,
 			JSONParent: parent,
 			Sources: []model.CandidateSource{{
-				Source:   SourceAISemanticHypothesis,
+				Source:   source,
 				Priority: priority,
 				Reason:   record.Reason,
 			}},
