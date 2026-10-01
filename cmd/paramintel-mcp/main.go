@@ -315,6 +315,10 @@ func boundedDiagnostic(value string) string {
 	return value
 }
 
+func boolPointer(value bool) *bool {
+	return &value
+}
+
 func newMCPServer() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "paramintel",
@@ -324,11 +328,23 @@ func newMCPServer() *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "inspect_request_file",
 		Description: "Read a local raw HTTP request from the configured request root and return only sanitized structure for semantic reasoning. This tool does not send a target request and omits headers, cookies, authorization values, query/form values, JSON primitive values, hostnames, and raw response text.",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: boolPointer(false),
+			IdempotentHint:  true,
+			OpenWorldHint:   boolPointer(false),
+			ReadOnlyHint:    true,
+		},
 	}, inspectRequestFile)
 
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "analyze_request_file",
 		Description: "Run ParamIntel against an authorized raw HTTP request using externally supplied semantic parameter/value hypotheses. The hints are never treated as findings: ParamIntel still performs its normal live verification, repeated trials, paired random-name controls, confidence checks, and evidence collection. This tool sends HTTP requests to the captured target.",
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: boolPointer(true),
+			IdempotentHint:  false,
+			OpenWorldHint:   boolPointer(true),
+			ReadOnlyHint:    false,
+		},
 	}, analyzeRequestFile)
 
 	return server
