@@ -16,8 +16,8 @@ jobs:
       fail-fast: false
       matrix:
         go:
-          - '1.26.x'
-          - '1.27.x'
+          - '1.26.10'
+          - '1.27.3'
 
     steps:
       - uses: actions/checkout@v4
@@ -54,13 +54,13 @@ jobs:
       matrix:
         include:
           - label: Go 1.26 legacy JSON
-            go: '1.26.x'
+            go: '1.26.10'
             goexperiment: ''
           - label: Go 1.27 JSON v2 backend
-            go: '1.27.x'
+            go: '1.27.3'
             goexperiment: ''
           - label: Go 1.27 legacy JSON backend
-            go: '1.27.x'
+            go: '1.27.3'
             goexperiment: 'nojsonv2'
 
     steps:
