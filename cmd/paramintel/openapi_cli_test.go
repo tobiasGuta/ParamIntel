@@ -357,3 +357,34 @@ func TestCLIOversizedOpenAPIFailsBeforeRequest(t *testing.T) {
 		t.Fatalf("network requests=%d despite failing input admission", calls.Load())
 	}
 }
+
+func TestCLIUntrustedMalformedOpenAPIFailsBeforeNetwork(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-only isolated parser")
+	}
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer server.Close()
+	dir := t.TempDir()
+	requestPath := filepath.Join(dir, "request.txt")
+	specPath := filepath.Join(dir, "invalid.yaml")
+	raw := fmt.Sprintf("GET %s/resource HTTP/1.1\r\nHost: api.example.test\r\n\r\n", server.URL)
+	if err := os.WriteFile(requestPath, []byte(raw), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(specPath, []byte("openapi: 3.1.0\npaths: [\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "run", ".", "-request", requestPath,
+		"-openapi", specPath, "-openapi-untrusted", "-openapi-parse-timeout=15s")
+	out, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(out), "isolated openapi parser:") {
+		t.Fatalf("invalid document should fail in isolated validator: err=%v output=%s", err, out)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("malformed untrusted OpenAPI triggered %d HTTP requests", calls.Load())
+	}
+}
