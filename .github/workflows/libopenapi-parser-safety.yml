@@ -1,0 +1,40 @@
+name: libopenapi parser safety
+
+on:
+  pull_request:
+    paths:
+      - 'go.mod'
+      - 'go.sum'
+      - 'internal/schemaintel/**'
+      - '.github/workflows/libopenapi-parser-safety.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  bounded-fixtures:
+    name: Parser fixtures Go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        go:
+          - '1.26.10'
+          - '1.27.3'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - name: Verify module checksums
+        run: go mod verify
+      - name: Verify reproducible module lockfiles
+        run: |
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+      - name: Run parser, candidate evidence and bounded synthetic resource fixtures
+        env:
+          PARAMINTEL_WATCH_RESOURCE: '1'
+        run: go test ./internal/schemaintel -run '^TestLibopenapiWatch' -count=1 -v -timeout=3m
