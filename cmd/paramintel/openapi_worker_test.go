@@ -3,34 +3,33 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"net/http"
-
-	"github.com/tobiasGuta/ParamIntel/internal/model"
 	"errors"
+	"net/http"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/tobiasGuta/ParamIntel/internal/model"
 	"github.com/tobiasGuta/ParamIntel/internal/schemaintel"
 )
 
 func TestOpenAPIIsolationPolicyRejectsUnsafeConfiguration(t *testing.T) {
 	ok := openAPIIsolationPolicy{
-		MaxBytes: schemaintel.DefaultMaxDocumentBytes,
+		MaxBytes:  schemaintel.DefaultMaxDocumentBytes,
 		MemoryMiB: defaultOpenAPIMemoryMiB,
-		Timeout: defaultOpenAPITimeout,
+		Timeout:   defaultOpenAPITimeout,
 	}
 	if err := ok.validate(); err != nil {
 		t.Fatalf("valid policy: %v", err)
 	}
 	for _, candidate := range []openAPIIsolationPolicy{
-		{MaxBytes: 0, MemoryMiB: 768, Timeout: 15*time.Second},
-		{MaxBytes: 65<<20, MemoryMiB: 768, Timeout: 15*time.Second},
-		{MaxBytes: 1024, MemoryMiB: 255, Timeout: 15*time.Second},
-		{MaxBytes: 1024, MemoryMiB: 2049, Timeout: 15*time.Second},
+		{MaxBytes: 0, MemoryMiB: 768, Timeout: 15 * time.Second},
+		{MaxBytes: 65 << 20, MemoryMiB: 768, Timeout: 15 * time.Second},
+		{MaxBytes: 1024, MemoryMiB: 255, Timeout: 15 * time.Second},
+		{MaxBytes: 1024, MemoryMiB: 2049, Timeout: 15 * time.Second},
 		{MaxBytes: 1024, MemoryMiB: 768, Timeout: time.Millisecond},
-		{MaxBytes: 1024, MemoryMiB: 768, Timeout: 61*time.Second},
+		{MaxBytes: 1024, MemoryMiB: 768, Timeout: 61 * time.Second},
 	} {
 		if err := candidate.validate(); err == nil {
 			t.Fatalf("invalid untrusted parser policy was accepted: %+v", candidate)
@@ -40,9 +39,9 @@ func TestOpenAPIIsolationPolicyRejectsUnsafeConfiguration(t *testing.T) {
 
 func TestUntrustedOpenAPIWorkerFailsClosedBeforeLaunching(t *testing.T) {
 	policy := openAPIIsolationPolicy{
-		MaxBytes: 100,
+		MaxBytes:  100,
 		MemoryMiB: 768,
-		Timeout: 1*time.Second,
+		Timeout:   1 * time.Second,
 	}
 	spec := []byte("openapi: 3.1.0\ninfo: {title: Test, version: '1'}\npaths: {}\n")
 	_, err := runIsolatedOpenAPI(context.Background(), openAPIWorkerRequest{
@@ -97,11 +96,11 @@ func TestUntrustedWorkerReceivesOnlyStructuralData(t *testing.T) {
 		Phase: "analyze",
 		Template: model.RequestTemplate{
 			Method: "POST",
-			URL: "https://private.example.test/users/42?session=private-query-token",
+			URL:    "https://private.example.test/users/42?session=private-query-token",
 			Headers: http.Header{
-				"Content-Type": {"application/json"},
+				"Content-Type":  {"application/json"},
 				"Authorization": {"Bearer secret-auth-token"},
-				"Cookie": {"sid=secret-cookie"},
+				"Cookie":        {"sid=secret-cookie"},
 			},
 			Body: []byte(`{"profile":{"name":"sensitive-name","settings":{"enabled":true}},"secret_scalar":91234,"items":["secret-array-value"]}`),
 		},
