@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"runtime"
@@ -79,6 +81,56 @@ func (b *cappedOutput) Write(p []byte) (int, error) {
 	return b.Buffer.Write(p)
 }
 
+// minimalJSONShape preserves only keys and object nesting. Analyze's
+// collectActualJSON does not inspect scalar values or array contents.
+func minimalJSONShape(value any) any {
+	if object, ok := value.(map[string]any); ok {
+		clean := make(map[string]any, len(object))
+		for key, child := range object {
+			clean[key] = minimalJSONShape(child)
+		}
+		return clean
+	}
+	return nil
+}
+
+func minimizeWorkerAnalysisContext(req *openAPIWorkerRequest) error {
+	if req.Phase != "analyze" {
+		req.Template = model.RequestTemplate{}
+		req.Baseline = model.BaselineProfile{}
+		return nil
+	}
+	parsedURL, err := url.Parse(req.Template.URL)
+	if err != nil {
+		return fmt.Errorf("cannot prepare parser request path: %w", err)
+	}
+	safeURL := (&url.URL{Scheme: "https", Host: "schema.invalid", Path: parsedURL.Path, RawPath: parsedURL.RawPath}).String()
+	var scrubbed []byte
+	if len(bytes.TrimSpace(req.Template.Body)) > 0 {
+		var decoded any
+		if err := json.Unmarshal(req.Template.Body, &decoded); err != nil {
+			return fmt.Errorf("cannot prepare parser request JSON structure: %w", err)
+		}
+		scrubbed, err = json.Marshal(minimalJSONShape(decoded))
+		if err != nil {
+			return fmt.Errorf("encode parser request JSON structure: %w", err)
+		}
+	}
+	req.Template = model.RequestTemplate{
+		Method: req.Template.Method,
+		URL: safeURL,
+		Headers: http.Header{"Content-Type": []string{req.Template.Headers.Get("Content-Type")}},
+		Body: scrubbed,
+	}
+	req.Baseline = model.BaselineProfile{
+		StatusCode: req.Baseline.StatusCode,
+		StatusStable: req.Baseline.StatusStable,
+		ContentType: req.Baseline.ContentType,
+		ContentTypeStable: req.Baseline.ContentTypeStable,
+	}
+	return nil
+}
+
 // runIsolatedOpenAPI never calls libopenapi in the parent process. Every
 // phase runs in a separate subprocess, with a kernel-enforced data/mmap
 // limit on Linux and a parent-enforced wall clock deadline.
@@ -97,6 +149,9 @@ func runIsolatedOpenAPI(ctx context.Context, req openAPIWorkerRequest, policy op
 	}
 	if int64(len(req.Spec)) > policy.MaxBytes {
 		return openAPIWorkerResponse{}, fmt.Errorf("%w: got %d bytes, limit %d", schemaintel.ErrDocumentTooLarge, len(req.Spec), policy.MaxBytes)
+	}
+	if err := minimizeWorkerAnalysisContext(&req); err != nil {
+		return openAPIWorkerResponse{}, err
 	}
 	raw, err := json.Marshal(req)
 	if err != nil {
