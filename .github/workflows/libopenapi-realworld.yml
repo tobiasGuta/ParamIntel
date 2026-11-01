@@ -1,0 +1,106 @@
+name: Real-world OpenAPI differential review (isolated)
+
+on:
+  push:
+    branches:
+      - test/libopenapi-compat-20261101
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  realworld-matrix:
+    name: Real-world libopenapi ${{ matrix.libopenapi }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        libopenapi: ['v0.25.0', 'v0.42.0']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.10'
+          cache: false
+      - name: Fetch fixed public OpenAPI source documents only
+        env:
+          PINNED_SOURCE: f04b8d0bcd39c52e1cf3ad7a5fe744709832ae49
+        run: |
+          python3 - <<'PY'
+          import hashlib, os, pathlib, urllib.request
+          root = pathlib.Path("realworld-specs")
+          root.mkdir()
+          files = {
+              "1password": "APIs/1password.com/events/1.2.0/openapi.yaml",
+              "ably": "APIs/ably.io/platform/1.1.0/openapi.yaml",
+              "spotify": "APIs/spotify.com/1.0.0/openapi.yaml",
+              "trello": "APIs/trello.com/1.0/openapi.yaml",
+              "stripe": "APIs/stripe.com/2022-11-15/openapi.yaml",
+          }
+          for name, path in files.items():
+              url = f"https://raw.githubusercontent.com/APIs-guru/openapi-directory/{os.environ['PINNED_SOURCE']}/{path}"
+              with urllib.request.urlopen(url, timeout=45) as resp:
+                  data = resp.read((6 << 20) + 1)
+              if not 0 < len(data) <= 6 << 20:
+                  raise RuntimeError(f"unexpected document size {name} {len(data)}")
+              (root / (name + ".yaml")).write_bytes(data)
+              print(f"PINNED_PUBLIC_SPEC {name} bytes={len(data)} sha256={hashlib.sha256(data).hexdigest()}")
+          PY
+      - name: Select parser without changing committed dependency
+        run: |
+          go mod edit -require=github.com/pb33f/libopenapi@${{ matrix.libopenapi }}
+          go mod tidy
+          go list -m github.com/pb33f/libopenapi
+      - name: Adapt v0.42 parser API only in this runner
+        if: matrix.libopenapi == 'v0.42.0'
+        run: |
+          sed -i '/^[[:space:]]*"errors"$/d' internal/schemaintel/load.go
+          sed -i 's/if len(buildErrs) > 0 {/if buildErrs != nil {/' internal/schemaintel/load.go
+          sed -i 's/errors.Join(buildErrs\.\.\.)/buildErrs/' internal/schemaintel/load.go
+      - name: Parse and analyze only local public specs
+        env:
+          PARAMINTEL_REALWORLD_SPEC_DIR: ../../realworld-specs
+          PARAMINTEL_REALWORLD_SNAPSHOT_PATH: realworld-snapshot.json
+          GOMEMLIMIT: 384MiB
+        run: go test ./internal/schemaintel -run '^TestLibopenapiWatchRealWorld$' -count=1 -v -timeout=4m
+      - name: Upload complete review snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: realworld-${{ matrix.libopenapi }}
+          path: internal/schemaintel/realworld-snapshot.json
+          if-no-files-found: error
+          retention-days: 7
+
+  compare:
+    needs: realworld-matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: realworld-*
+          path: comparison
+      - name: Diff full response-schema evidence across parser versions
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, pathlib, sys
+          a = pathlib.Path("comparison/realworld-v0.25.0/realworld-snapshot.json").read_bytes()
+          b = pathlib.Path("comparison/realworld-v0.42.0/realworld-snapshot.json").read_bytes()
+          print("REALWORLD_SNAPSHOT_OLD", hashlib.sha256(a).hexdigest())
+          print("REALWORLD_SNAPSHOT_NEW", hashlib.sha256(b).hexdigest())
+          if a == b:
+              print("REALWORLD_REPORTS_BYTE_IDENTICAL")
+              sys.exit(0)
+          old, new = json.loads(a), json.loads(b)
+          for x, y in zip(old, new):
+              if x != y:
+                  print("REALWORLD_DIFFERENT_SPEC", x["name"], "old_status", x["parse_status"], "new_status", y["parse_status"])
+                  for i,(ox,ny) in enumerate(zip(x.get("checks",[]),y.get("checks",[]))):
+                      if ox!=ny:
+                          print("REALWORLD_DIFFERENT_OPERATION",i, ox.get("method"), ox.get("path"),"old",ox.get("error_class"),"new",ny.get("error_class"))
+                          break
+          print("REALWORLD_REPORTS_DIFFER: investigate before approving PR")
+          sys.exit(1)
+          PY
