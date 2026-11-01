@@ -13,6 +13,8 @@ jobs:
     name: libopenapi ${{ matrix.libopenapi }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    env:
+      PARAMINTEL_WATCH_EXAMPLE_REF_EXPECTED: ${{ matrix.libopenapi == 'v0.42.0' && 'accept' || 'reject' }}
     strategy:
       fail-fast: false
       matrix:
