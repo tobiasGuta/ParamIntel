@@ -52,7 +52,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: libopenapi-evidence-${{ matrix.libopenapi }}
-          path: evidence.jsonl
+          path: internal/schemaintel/evidence.jsonl
           if-no-files-found: error
           retention-days: 7
       - name: Existing schema intelligence regression suite
