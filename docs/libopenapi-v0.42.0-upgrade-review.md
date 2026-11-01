@@ -77,6 +77,31 @@ produce schema-intelligence candidate reports and must not be counted as
 successful evidence-equality cases. A future change that accepts either document
 should receive a separate semantic/evidence review.
 
+## Large-spec sizing experiment (November 1, 2026)
+
+A separate **read-only, isolated test** downloaded the public GitHub REST API
+OpenAPI 3.0.3 specification from `github/rest-api-description` at commit
+`f9ed74230d54847b5ca00a1343e8e349e858b8fb` (10,724,037 bytes, SHA-256
+`3f57887ffcf600daa2242553303312f7f1c9d0527cd435561baa9fbf7979edd4`).
+Both parsers accepted the local document, with `GOMEMLIMIT=384MiB`,
+a 90-second subprocess deadline, and a watchdog that terminated the process
+if observed RSS exceeded 768 MiB:
+
+| Version | Parse time | Kernel-reported peak RSS | Result |
+|---|---:|---:|---|
+| v0.25.0 | 3.353 seconds | 396,116 KiB (386.8 MiB) | Accepted |
+| v0.42.0 | 0.949 seconds | 294,272 KiB (287.4 MiB) | Accepted |
+
+Evidence: https://github.com/tobiasGuta/ParamIntel/actions/runs/41324079235
+
+These **single-run measurements on CI hardware** are not benchmarks or
+proof of safety on adversarial inputs. They demonstrate that a normal public
+API spec can be larger than 10 MiB and temporarily consume hundreds of MiB
+of resident memory. A proposed default 16 MiB input-size ceiling would
+admit this source, but size limits alone cannot enforce CPU/RAM budgets.
+No candidate-analysis output was compared for this large spec; this
+experiment measured parsing only.
+
 ## Decision: production input and parser-resource safety
 
 **Threat model:** `-openapi` currently reads a local operator-selected document
@@ -99,7 +124,7 @@ workflow**. A candidate design should include:
    configurable, documented 16 MiB *default* document ceiling, not a global
    unchangeable constant. This accommodates the 3.7 MiB Stripe input and
    many larger real-world specs, but size alone does not bound expansion.
-   Establish the final default using additional large-spec profiling.
+   Keep the default provisional until more representative public specs and operator workloads have been profiled; this review includes a 10.7 MiB GitHub API example.
 2. A clear fail-closed error for oversized documents with the configured
    byte ceiling, and unit/CLI tests for exact-boundary inputs. No silent
    truncation and no implicit downloads of external references.
