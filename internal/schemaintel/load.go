@@ -15,6 +15,15 @@ type Document struct {
 }
 
 func Parse(data []byte) (*Document, error) {
+	return ParseWithLimit(data, DefaultMaxDocumentBytes)
+}
+
+// ParseWithLimit preserves the existing parser contract after a hard
+// pre-model byte admission. It does not claim to bound YAML expansion.
+func ParseWithLimit(data []byte, limit int64) (*Document, error) {
+	if err := validateDocumentBytes(data, limit); err != nil {
+		return nil, err
+	}
 	if len(data) == 0 {
 		return nil, fmt.Errorf("openapi document is empty")
 	}
