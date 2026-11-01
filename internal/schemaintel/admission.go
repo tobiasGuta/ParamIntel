@@ -40,9 +40,9 @@ func ReadFileLimited(path string, limit int64) ([]byte, error) {
 	if err := ValidateDocumentLimit(limit); err != nil {
 		return nil, err
 	}
-	file, err := os.Open(path)
+	file, err := openRegularOpenAPIDocument(path)
 	if err != nil {
-		return nil, fmt.Errorf("open openapi document: %w", err)
+		return nil, fmt.Errorf("open regular openapi document: %w", err)
 	}
 	defer file.Close()
 
