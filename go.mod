@@ -4,7 +4,7 @@ go 1.26.0
 
 toolchain go1.26.10
 
-require github.com/pb33f/libopenapi v0.25.0
+require github.com/pb33f/libopenapi v0.42.0
 
 require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
