@@ -131,6 +131,15 @@ func minimizeWorkerAnalysisContext(req *openAPIWorkerRequest) error {
 	return nil
 }
 
+func isolatedOpenAPIWorkerEnvironment(policy openAPIIsolationPolicy, cpuSeconds int64) []string {
+	return []string{
+		fmt.Sprintf("%s=%d", openAPIWorkerMemoryEnv, policy.MemoryMiB),
+		fmt.Sprintf("%s=%d", openAPIWorkerCPUEnv, cpuSeconds),
+		fmt.Sprintf("GOMEMLIMIT=%dMiB", policy.MemoryMiB/2),
+		"GOGC=50",
+	}
+}
+
 // runIsolatedOpenAPI never calls libopenapi in the parent process. Every
 // phase runs in a separate subprocess, with a kernel-enforced data/mmap
 // limit on Linux and a parent-enforced wall clock deadline.
@@ -170,12 +179,9 @@ func runIsolatedOpenAPI(ctx context.Context, req openAPIWorkerRequest, policy op
 	cmd := exec.CommandContext(ctx, executable, openAPIWorkerArg)
 	cmd.Stdin = bytes.NewReader(raw)
 	cpuSeconds := int64(policy.Timeout/time.Second) + 2
-	cmd.Env = append(os.Environ(),
-		fmt.Sprintf("%s=%d", openAPIWorkerMemoryEnv, policy.MemoryMiB),
-		fmt.Sprintf("%s=%d", openAPIWorkerCPUEnv, cpuSeconds),
-		fmt.Sprintf("GOMEMLIMIT=%dMiB", policy.MemoryMiB/2),
-		"GOGC=50",
-	)
+	// The child must not inherit API keys, cloud credentials, proxy
+	// settings or other scanner environment variables.
+	cmd.Env = isolatedOpenAPIWorkerEnvironment(policy, cpuSeconds)
 	stdout := &cappedOutput{max: maxWorkerResponseBytes}
 	stderr := &cappedOutput{max: maxWorkerDiagnosticBytes}
 	cmd.Stdout = stdout
