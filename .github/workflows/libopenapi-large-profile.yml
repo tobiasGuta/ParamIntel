@@ -1,0 +1,109 @@
+name: Large public OpenAPI parse profile (isolated)
+
+on:
+  push:
+    branches:
+      - test/libopenapi-compat-20261101
+
+permissions:
+  contents: read
+
+jobs:
+  github-spec-profile:
+    name: GitHub 10MiB spec ${{ matrix.libopenapi }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        libopenapi: ['v0.25.0', 'v0.42.0']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.10'
+          cache: false
+      - name: Fetch pinned public GitHub REST API schema
+        run: |
+          python3 - <<'PY'
+          import hashlib, pathlib, urllib.request
+          url = "https://raw.githubusercontent.com/github/rest-api-description/f9ed74230d54847b5ca00a1343e8e349e858b8fb/descriptions/api.github.com/api.github.com.yaml"
+          with urllib.request.urlopen(url, timeout=45) as r:
+              data=r.read((15<<20)+1)
+          if not 0<len(data)<=15<<20:
+              raise RuntimeError(f"unexpected GitHub API spec size {len(data)}")
+          pathlib.Path("github-api.yaml").write_bytes(data)
+          print(f"GITHUB_LARGE_SOURCE bytes={len(data)} sha256={hashlib.sha256(data).hexdigest()}")
+          PY
+      - name: Select parser version and compile synthetic read-only test
+        run: |
+          go mod edit -require=github.com/pb33f/libopenapi@${{ matrix.libopenapi }}
+          go mod tidy
+          if [ '${{ matrix.libopenapi }}' = 'v0.42.0' ]; then
+            sed -i '/^[[:space:]]*"errors"$/d' internal/schemaintel/load.go
+            sed -i 's/if len(buildErrs) > 0 {/if buildErrs != nil {/' internal/schemaintel/load.go
+            sed -i 's/errors.Join(buildErrs\.\.\.)/buildErrs/' internal/schemaintel/load.go
+          fi
+          cat > internal/schemaintel/large_profile_local_test.go <<'GO'
+          package schemaintel
+          import ("fmt";"os";"syscall";"testing";"time")
+          func TestGitHubLargeSpecProfile(t *testing.T) {
+            path:=os.Getenv("GITHUB_SPEC_PATH")
+            if path==""{t.Skip("isolated public profile only")}
+            data,err:=os.ReadFile(path)
+            if err!=nil{t.Fatal(err)}
+            start:=time.Now()
+            doc,parseErr:=Parse(data)
+            var usage syscall.Rusage
+            if err:=syscall.Getrusage(syscall.RUSAGE_SELF,&usage);err!=nil{t.Fatal(err)}
+            status:="accepted"
+            if parseErr!=nil{status="rejected"}
+            ver:=""
+            if doc!=nil{ver=doc.Version()}
+            fmt.Printf("GITHUB_SPEC_PROFILE bytes=%d status=%s version=%s duration_ms=%d kernel_peak_rss_kib=%d\n",len(data),status,ver,time.Since(start).Milliseconds(),usage.Maxrss)
+            if parseErr!=nil {
+              message:=parseErr.Error()
+              if len(message)>400{message=message[:400]}
+              fmt.Printf("GITHUB_SPEC_PARSE_REASON %s\n",message)
+            }
+          }
+          GO
+          go test -c -o /tmp/paramintel-spec-profile.test ./internal/schemaintel
+      - name: Enforce 90-second and 768MiB process ceilings
+        env:
+          GITHUB_SPEC_PATH: github-api.yaml
+          GOMEMLIMIT: 384MiB
+          GOGC: '50'
+        run: |
+          python3 - <<'PY'
+          import os, subprocess, sys, time
+          p=subprocess.Popen(["/tmp/paramintel-spec-profile.test","-test.run=^TestGitHubLargeSpecProfile$","-test.v"],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,env=os.environ.copy())
+          start=time.monotonic()
+          max_rss=0
+          cap=768*1024*1024
+          failed=""
+          while p.poll() is None:
+              try:
+                  status=open(f"/proc/{p.pid}/status").read()
+                  for line in status.splitlines():
+                      if line.startswith("VmHWM:") or line.startswith("VmRSS:"):
+                          max_rss=max(max_rss,int(line.split()[1])*1024)
+              except (FileNotFoundError,ProcessLookupError):
+                  pass
+              if max_rss>cap:
+                  failed=f"hard RSS watchdog exceeded: {max_rss} > {cap}"
+                  p.kill()
+                  break
+              if time.monotonic()-start>90:
+                  failed="hard 90-second subprocess deadline exceeded"
+                  p.kill()
+                  break
+              time.sleep(0.01)
+          out=p.communicate()[0].decode("utf-8",errors="replace")
+          print(out)
+          print(f"GITHUB_SPEC_WATCHDOG observed_peak_rss_mib={max_rss/1048576:.1f} deadline_seconds=90 cap_mib=768 exit={p.returncode}")
+          if failed:
+              sys.exit(failed)
+          if p.returncode:
+              sys.exit(f"parser child process failed with code {p.returncode}")
+          PY
