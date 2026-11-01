@@ -10,6 +10,7 @@ import (
  "os/exec"
  "strconv"
  "strings"
+ "syscall"
  "testing"
  "time"
 )
@@ -147,7 +148,11 @@ func TestLibopenapiWatchResourceChild(t *testing.T) {
   if anErr!=nil {outcome="analyze-error"}
  }
  if name=="malformed"&&err==nil {t.Fatal("invalid YAML unexpectedly parsed")}
- fmt.Printf("WATCH_RESOURCE case=%s bytes=%d outcome=%s\n",name,len(spec),outcome)
+ var usage syscall.Rusage
+ if err:=syscall.Getrusage(syscall.RUSAGE_SELF,&usage);err!=nil {t.Fatalf("measure peak RSS: %v",err)}
+ const peakRSSCeilingKiB=int64(256*1024)
+ if usage.Maxrss>peakRSSCeilingKiB {t.Fatalf("kernel-reported peak RSS cap exceeded fixture=%s maxrss_kib=%d ceiling_kib=%d",name,usage.Maxrss,peakRSSCeilingKiB)}
+ fmt.Printf("WATCH_RESOURCE case=%s bytes=%d outcome=%s peak_rss_kib=%d cap_kib=%d\n",name,len(spec),outcome,usage.Maxrss,peakRSSCeilingKiB)
 }
 
 func watchReadPeakRSS(pid int) int64 {
