@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
-	"sync/atomic"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/tobiasGuta/ParamIntel/internal/model"
@@ -209,7 +209,6 @@ paths:
                             type: boolean
                             readOnly: true
 `
-
 
 func TestCLIOpenAPIBodylessGETUsesResponseIntelligenceOnly(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
