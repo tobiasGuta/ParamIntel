@@ -139,3 +139,37 @@ func TestUntrustedWorkerReceivesOnlyStructuralData(t *testing.T) {
 		t.Fatalf("property paths not preserved: %+v", result)
 	}
 }
+
+func TestIsolatedOpenAPIWorkerEnvironmentDoesNotInheritCredentials(t *testing.T) {
+	t.Setenv("PARAMINTEL_FAKE_SECRET_TOKEN", "sensitive-scanner-token")
+	policy := openAPIIsolationPolicy{
+		MaxBytes:  schemaintel.DefaultMaxDocumentBytes,
+		MemoryMiB: 768,
+		Timeout:   15 * time.Second,
+	}
+	values := isolatedOpenAPIWorkerEnvironment(policy, 17)
+	if len(values) != 4 {
+		t.Fatalf("worker env contains unexpected entries: %+v", values)
+	}
+	for _, entry := range values {
+		if strings.Contains(entry, "sensitive-scanner-token") ||
+			strings.Contains(entry, "PARAMINTEL_FAKE_SECRET_TOKEN") {
+			t.Fatalf("parser child inherited scanner secret: %q", entry)
+		}
+	}
+	for _, want := range []string{
+		"PARAMINTEL_INTERNAL_OPENAPI_MEMORY_MIB=768",
+		"PARAMINTEL_INTERNAL_OPENAPI_CPU_SECONDS=17",
+		"GOMEMLIMIT=384MiB", "GOGC=50",
+	} {
+		found := false
+		for _, entry := range values {
+			if entry == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("worker resource setting missing: %q", want)
+		}
+	}
+}
