@@ -177,6 +177,7 @@ func runIsolatedOpenAPI(ctx context.Context, req openAPIWorkerRequest, policy op
 	ctx, cancel := context.WithTimeout(ctx, policy.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, executable, openAPIWorkerArg)
+	configureOpenAPIWorkerCommand(cmd)
 	cmd.Stdin = bytes.NewReader(raw)
 	cpuSeconds := int64(policy.Timeout/time.Second) + 2
 	// The child must not inherit API keys, cloud credentials, proxy
