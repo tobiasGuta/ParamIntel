@@ -3,10 +3,14 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 func requireMmapDataLimitSupport() error {
@@ -75,4 +79,22 @@ func applyOpenAPIWorkerLimits(memoryMiB int, cpuSeconds int64) error {
 		return fmt.Errorf("CPU limit: %w", err)
 	}
 	return nil
+}
+
+// configureOpenAPIWorkerCommand isolates the worker's process group so a
+// timeout kills descendants that have not deliberately escaped the group.
+// WaitDelay ensures inherited output pipes cannot make Run wait indefinitely.
+func configureOpenAPIWorkerCommand(cmd *exec.Cmd) {
+	cmd.WaitDelay = 2 * time.Second
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return os.ErrProcessDone
+		}
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		if errors.Is(err, syscall.ESRCH) {
+			return os.ErrProcessDone
+		}
+		return err
+	}
 }
