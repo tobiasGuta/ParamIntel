@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+
+	"github.com/tobiasGuta/ParamIntel/internal/model"
 	"errors"
 	"runtime"
 	"strings"
@@ -85,5 +89,54 @@ func TestOpenAPIWorkerOutputCap(t *testing.T) {
 	}
 	if b.String() != "abcd" {
 		t.Fatalf("output buffer mutated after oversized write: %q", b.String())
+	}
+}
+
+func TestUntrustedWorkerReceivesOnlyStructuralData(t *testing.T) {
+	request := openAPIWorkerRequest{
+		Phase: "analyze",
+		Template: model.RequestTemplate{
+			Method: "POST",
+			URL: "https://private.example.test/users/42?session=private-query-token",
+			Headers: http.Header{
+				"Content-Type": {"application/json"},
+				"Authorization": {"Bearer secret-auth-token"},
+				"Cookie": {"sid=secret-cookie"},
+			},
+			Body: []byte(`{"profile":{"name":"sensitive-name","settings":{"enabled":true}},"secret_scalar":91234,"items":["secret-array-value"]}`),
+		},
+		Baseline: model.BaselineProfile{
+			StatusCode: 200, StatusStable: true,
+			ContentType: "application/json", ContentTypeStable: true,
+		},
+	}
+	if err := minimizeWorkerAnalysisContext(&request); err != nil {
+		t.Fatal(err)
+	}
+	out, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded := string(out)
+	for _, secret := range []string{"secret-auth-token", "secret-cookie", "private-query-token", "private.example.test", "sensitive-name", "secret-array-value", "91234"} {
+		if strings.Contains(encoded, secret) {
+			t.Fatalf("worker input contains sensitive value %q", secret)
+		}
+	}
+	if request.Template.URL != "https://schema.invalid/users/42" {
+		t.Fatalf("worker URL not minimized: %q", request.Template.URL)
+	}
+	if request.Template.Headers.Get("Content-Type") != "application/json" || request.Template.Headers.Get("Authorization") != "" {
+		t.Fatalf("worker request headers contain unnecessary data: %+v", request.Template.Headers)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(request.Template.Body, &result); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := result["profile"].(map[string]any); !ok {
+		t.Fatalf("JSON object nesting not preserved: %+v", result)
+	}
+	if _, ok := result["items"]; !ok {
+		t.Fatalf("property paths not preserved: %+v", result)
 	}
 }
