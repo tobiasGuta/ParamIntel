@@ -127,6 +127,34 @@ If the server reacts to every unknown boolean property, candidate and control bo
 
 `-openapi` reads a local document only. ParamIntel does not discover or download specifications automatically.
 
+### OpenAPI input hardening (review candidate)
+
+Local OpenAPI files are admitted through a bounded read (default **16 MiB**;
+`-openapi-max-bytes` can override this up to **64 MiB**). Oversized files are
+rejected before any HTTP probing. The direct `schemaintel.Parse` API also
+checks a default input limit before model construction.
+
+When working with a locally saved **untrusted** specification on Linux, use
+`-openapi-untrusted` to parse and analyze the input in a separate worker
+process. Its data/mmap allocation limit and CPU limit are enforced by the
+Linux kernel, with a parent-controlled wall-clock deadline. The worker
+validates the document before the first HTTP baseline request and returns
+only a complete schema-intelligence report.
+
+```sh
+paramintel -request request.txt -openapi third-party.yaml \
+  -openapi-untrusted -openapi-max-bytes=16777216 \
+  -openapi-parse-timeout=15s -openapi-memory-mib=768
+```
+
+Non-Linux platforms fail closed if `-openapi-untrusted` is requested;
+ordinary bounded local parsing remains supported. This worker is **resource
+isolation, not a complete network/filesystem security sandbox**. Arbitrary
+automatic ingestion of untrusted OpenAPI files remains unsupported pending
+additional operating-system sandboxing. See
+[OpenAPI resource-boundary design](docs/openapi-untrusted-resource-boundary.md).
+
+
 ### v0.9 OpenAPI boundaries
 
 v0.9 deliberately does **not**:

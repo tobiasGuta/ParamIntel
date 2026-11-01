@@ -27,7 +27,15 @@ const (
 )
 
 func main() {
+	if len(os.Args) == 2 && os.Args[1] == openAPIWorkerArg {
+		os.Exit(runOpenAPIWorker())
+	}
+
 	var reqPath, wordPath, outPath, scheme, locationSpec, contextResponsePath, openAPIPath string
+	var openAPIMaxBytes int64
+	var openAPIParseTimeout time.Duration
+	var openAPIMemoryMiB int
+	var openAPIUntrusted bool
 	var aiProviderName, aiModel, aiAPIKeyEnv, aiContextResponsePath string
 	var baselineN, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget int
 	var timeout, delay, aiTimeout time.Duration
@@ -39,6 +47,10 @@ func main() {
 	flag.StringVar(&contextResponsePath, "context-response", "", "optional related raw HTTP response or JSON body used to derive high-signal JSON candidates")
 	flag.BoolVar(&jsonScaffold, "json-scaffold", false, "allow one-level response-derived JSON parent scaffolding from -context-response candidates")
 	flag.StringVar(&openAPIPath, "openapi", "", "optional local OpenAPI 3.x document used to derive deterministic JSON candidates")
+	flag.Int64Var(&openAPIMaxBytes, "openapi-max-bytes", schemaintel.DefaultMaxDocumentBytes, "maximum OpenAPI input size in bytes (1 to 67108864; default 16 MiB)")
+	flag.BoolVar(&openAPIUntrusted, "openapi-untrusted", false, "parse untrusted local OpenAPI in a resource-limited Linux subprocess (never in the scanner process)")
+	flag.DurationVar(&openAPIParseTimeout, "openapi-parse-timeout", defaultOpenAPITimeout, "wall-clock timeout per untrusted parser subprocess (1s to 1m)")
+	flag.IntVar(&openAPIMemoryMiB, "openapi-memory-mib", defaultOpenAPIMemoryMiB, "Linux subprocess data/mmap memory limit in MiB (256 to 2048)")
 	flag.StringVar(&outPath, "output", "", "JSON output path; stdout if empty")
 	flag.StringVar(&scheme, "scheme", "https", "scheme for relative raw requests: http or https")
 	flag.StringVar(&locationSpec, "locations", "auto", "discovery locations: auto or comma-separated query,form,json")
@@ -85,6 +97,11 @@ func main() {
 	fatal(validateDelay(delay))
 	fatal(validateAIOptions(aiAdvisorEnabled, aiValueAdvisorEnabled, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget, aiTimeout))
 	fatal(validateJSONScaffoldOptions(jsonScaffold, contextResponsePath))
+	openAPIPolicy := openAPIIsolationPolicy{MaxBytes: openAPIMaxBytes, MemoryMiB: openAPIMemoryMiB, Timeout: openAPIParseTimeout}
+	fatal(openAPIPolicy.validate())
+	if openAPIUntrusted && strings.TrimSpace(openAPIPath) == "" {
+		fatal(fmt.Errorf("-openapi-untrusted requires -openapi"))
+	}
 
 	locations, err := parseLocations(locationSpec)
 	fatal(err)
@@ -97,11 +114,19 @@ func main() {
 	}
 
 	var openAPIDoc *schemaintel.Document
+	var openAPIRaw []byte
 	if strings.TrimSpace(openAPIPath) != "" {
-		openAPIRaw, err := os.ReadFile(openAPIPath)
+		openAPIRaw, err = schemaintel.ReadFileLimited(openAPIPath, openAPIMaxBytes)
 		fatal(err)
-		openAPIDoc, err = schemaintel.Parse(openAPIRaw)
-		fatal(err)
+		if openAPIUntrusted {
+			_, err = runIsolatedOpenAPI(context.Background(), openAPIWorkerRequest{
+				Phase: "validate", Spec: openAPIRaw, Limit: openAPIMaxBytes,
+			}, openAPIPolicy)
+			fatal(err)
+		} else {
+			openAPIDoc, err = schemaintel.ParseWithLimit(openAPIRaw, openAPIMaxBytes)
+			fatal(err)
+		}
 	}
 
 	words, err := candidates.Load(wordPath)
@@ -186,9 +211,19 @@ func main() {
 		}
 	}
 
-	if openAPIDoc != nil {
-		openAPIReport, err := schemaintel.Analyze(openAPIDoc, tmpl, profile, schemaintel.DefaultConfig())
-		fatal(err)
+	if openAPIDoc != nil || openAPIUntrusted {
+		var openAPIReport schemaintel.Report
+		if openAPIUntrusted {
+			result, workerErr := runIsolatedOpenAPI(ctx, openAPIWorkerRequest{
+				Phase: "analyze", Spec: openAPIRaw, Limit: openAPIMaxBytes,
+				Template: tmpl, Baseline: profile, Config: schemaintel.DefaultConfig(),
+			}, openAPIPolicy)
+			fatal(workerErr)
+			openAPIReport = *result.Report
+		} else {
+			openAPIReport, err = schemaintel.Analyze(openAPIDoc, tmpl, profile, schemaintel.DefaultConfig())
+			fatal(err)
+		}
 		openAPICandidates := schemaintel.ExistingParentCandidates(openAPIReport)
 		seeded = append(seeded, openAPICandidates...)
 		if verbose {
@@ -319,17 +354,17 @@ func main() {
 	}
 
 	engine := discovery.Engine{Client: client, Config: discovery.Config{
-		ChunkSize:        chunk,
-		Trials:           trials,
-		MinConfidence:    minConf,
-		Verbose:          verbose,
-		Logf:             func(format string, args ...any) { fmt.Printf(format, args...) },
-		Locations:        locations,
-		MaxJSONDepth:     jsonDepth,
-		Characterize:     characterize,
-		ValueAware:           valueAware,
-		ValueAwareBudget:     valueAwareBudget,
-		EvidenceGuidedRescue: true,
+		ChunkSize:             chunk,
+		Trials:                trials,
+		MinConfidence:         minConf,
+		Verbose:               verbose,
+		Logf:                  func(format string, args ...any) { fmt.Printf(format, args...) },
+		Locations:             locations,
+		MaxJSONDepth:          jsonDepth,
+		Characterize:          characterize,
+		ValueAware:            valueAware,
+		ValueAwareBudget:      valueAwareBudget,
+		EvidenceGuidedRescue:  true,
 		SemanticValueAdvisor:  semanticValueAdvisor,
 		SemanticValuePriority: semanticValuePriority,
 		RescuePlanObserver:    rescuePlanObserver,
