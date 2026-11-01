@@ -9,6 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
+	"runtime"
+	"sync/atomic"
 	"strings"
 	"testing"
 
@@ -80,7 +83,7 @@ func TestCLIOpenAPIWithholdsScaffoldDescriptor(t *testing.T) {
 	}
 }
 
-func runOpenAPICLI(t *testing.T, srv *httptest.Server, specTemplate string) (model.ScanReport, string) {
+func runOpenAPICLI(t *testing.T, srv *httptest.Server, specTemplate string, extraArgs ...string) (model.ScanReport, string) {
 	t.Helper()
 	target, err := url.Parse(srv.URL)
 	if err != nil {
@@ -113,6 +116,7 @@ func runOpenAPICLI(t *testing.T, srv *httptest.Server, specTemplate string) (mod
 		"-value-aware=false",
 		"-output", outputPath,
 	)
+	cmd.Args = append(cmd.Args, extraArgs...)
 	combined, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("ParamIntel CLI failed: %v\n%s", err, combined)
@@ -293,3 +297,64 @@ paths:
                   available_credit:
                     type: number
 `
+
+func TestCLIOpenAPIUntrustedPreservesEvidence(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("untrusted parser subprocess uses Linux kernel limits")
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		var body map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			http.Error(w, "invalid json", http.StatusBadRequest)
+			return
+		}
+		profile, _ := body["profile"].(map[string]any)
+		if _, ok := profile["beta_access"]; ok {
+			fmt.Fprint(w, `{"state":"beta"}`)
+		} else {
+			fmt.Fprint(w, `{"state":"normal"}`)
+		}
+	}))
+	defer srv.Close()
+
+	trusted, _ := runOpenAPICLI(t, srv, openAPISpecExistingParent)
+	untrusted, _ := runOpenAPICLI(t, srv, openAPISpecExistingParent,
+		"-openapi-untrusted", "-openapi-parse-timeout=20s", "-openapi-memory-mib=768")
+	if !reflect.DeepEqual(trusted.Parameters, untrusted.Parameters) {
+		t.Fatalf("isolated parsing changed scan evidence:\ntrusted=%+v\nuntrusted=%+v", trusted.Parameters, untrusted.Parameters)
+	}
+}
+
+func TestCLIOversizedOpenAPIFailsBeforeRequest(t *testing.T) {
+	var calls atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+	tmp := t.TempDir()
+	rawRequest := fmt.Sprintf("GET %s/api/profile HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n", srv.URL)
+	if err := os.WriteFile(filepath.Join(tmp, "request.txt"), []byte(rawRequest), 0600); err != nil {
+		t.Fatal(err)
+	}
+	specPath := filepath.Join(tmp, "too-large.yaml")
+	if err := os.WriteFile(specPath, []byte(strings.Repeat("x", 1025)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, mode := range []string{"trusted", "untrusted"} {
+		args := []string{"run", ".", "-request", filepath.Join(tmp, "request.txt"),
+			"-openapi", specPath, "-openapi-max-bytes=1024"}
+		if mode == "untrusted" {
+			args = append(args, "-openapi-untrusted")
+		}
+		cmd := exec.Command("go", args...)
+		out, err := cmd.CombinedOutput()
+		if err == nil || !strings.Contains(string(out), "exceeds configured byte limit") {
+			t.Fatalf("mode=%s expected bounded rejection, got err=%v output=%s", mode, err, out)
+		}
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("network requests=%d despite failing input admission", calls.Load())
+	}
+}
