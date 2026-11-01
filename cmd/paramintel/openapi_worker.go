@@ -103,7 +103,7 @@ func runIsolatedOpenAPI(ctx context.Context, req openAPIWorkerRequest, policy op
 		return openAPIWorkerResponse{}, fmt.Errorf("encode isolated parser input: %w", err)
 	}
 	// JSON base64 representation of the document can exceed its raw size.
-	if len(raw) > int(2*schemaintel.MaxConfigurableDocumentBytes+1<<20) {
+	if len(raw) > int(2*schemaintel.MaxConfigurableDocumentBytes+(1<<20)) {
 		return openAPIWorkerResponse{}, fmt.Errorf("isolated parser request is too large")
 	}
 	executable, err := os.Executable()
@@ -163,7 +163,7 @@ func runOpenAPIWorker() int {
 		fmt.Fprintln(os.Stderr, "cannot enforce parser worker limits:", err)
 		return 2
 	}
-	decoder := json.NewDecoder(io.LimitReader(os.Stdin, 2*schemaintel.MaxConfigurableDocumentBytes+1<<20))
+	decoder := json.NewDecoder(io.LimitReader(os.Stdin, 2*schemaintel.MaxConfigurableDocumentBytes+(1<<20)))
 	decoder.DisallowUnknownFields()
 	var req openAPIWorkerRequest
 	if err := decoder.Decode(&req); err != nil {
