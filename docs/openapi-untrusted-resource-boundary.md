@@ -36,6 +36,12 @@ paramintel -request captured.txt -openapi third-party.yaml \
 - Fail closed on non-Linux platforms and Linux kernels older than 4.7.
 - An internal worker process receives the already byte-bounded document through
   stdin; the parent **never calls libopenapi on this untrusted buffer**.
+- The parent sends **only the method, sanitized path, Content-Type header,
+  JSON property/object structure, baseline status and baseline content type**
+  for analysis. Other request headers, cookies, query parameters, the
+  original hostname, scalar JSON values and unused baseline detail are
+  stripped. JSON property names are retained because they determine
+  candidate evidence.
 - The worker applies Linux `RLIMIT_DATA` to data/heap/mmap allocations and
   `RLIMIT_CPU` before decoding or parsing input. Linux 4.7+ enforces
   `RLIMIT_DATA` for `mmap`; the resource ceilings cannot be raised by the
