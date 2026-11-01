@@ -31,9 +31,29 @@ jobs:
           go mod tidy
           go list -m github.com/pb33f/libopenapi
           git diff --stat -- go.mod go.sum
+      - name: Runner-only v0.42 BuildV3Model API adapter
+        if: matrix.libopenapi == 'v0.42.0'
+        run: |
+          sed -i '/^[[:space:]]*"errors"$/d' internal/schemaintel/load.go
+          sed -i 's/if len(buildErrs) > 0 {/if buildErrs != nil {/' internal/schemaintel/load.go
+          sed -i 's/errors.Join(buildErrs\.\.\.)/buildErrs/' internal/schemaintel/load.go
+          git diff -- internal/schemaintel/load.go
       - name: Focused compatibility and bounded resource tests
+        id: focused
+        continue-on-error: true
         run: go test -mod=mod ./internal/schemaintel -run '^TestLibopenapiWatch' -count=1 -v -timeout=3m
       - name: Existing schema intelligence regression suite
+        id: schema
+        continue-on-error: true
         run: go test -mod=mod ./internal/schemaintel -count=1 -timeout=3m
-      - name: Complete module compilation and regression tests
+      - name: Full ParamIntel regression suite
+        id: full
+        continue-on-error: true
         run: go test -mod=mod ./... -count=1 -timeout=4m
+      - name: Fail on any test failure
+        if: always()
+        run: |
+          echo 'focused=${{ steps.focused.outcome }} schema=${{ steps.schema.outcome }} full=${{ steps.full.outcome }}'
+          test '${{ steps.focused.outcome }}' = success
+          test '${{ steps.schema.outcome }}' = success
+          test '${{ steps.full.outcome }}' = success
