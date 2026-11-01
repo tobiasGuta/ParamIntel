@@ -388,3 +388,55 @@ func TestCLIUntrustedMalformedOpenAPIFailsBeforeNetwork(t *testing.T) {
 		t.Fatalf("malformed untrusted OpenAPI triggered %d HTTP requests", calls.Load())
 	}
 }
+
+func TestCLIUntrustedRemoteReferenceDoesNotFetchBeforeNetwork(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux-only isolated parser")
+	}
+	var specServerCalls atomic.Int32
+	remoteRef := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		specServerCalls.Add(1)
+		fmt.Fprint(w, `{"type":"object"}`)
+	}))
+	defer remoteRef.Close()
+	var targetCalls atomic.Int32
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		targetCalls.Add(1)
+		fmt.Fprint(w, `{"ok":true}`)
+	}))
+	defer target.Close()
+
+	dir := t.TempDir()
+	requestPath := filepath.Join(dir, "request.txt")
+	specPath := filepath.Join(dir, "untrusted.yaml")
+	rawRequest := fmt.Sprintf("GET %s/remote HTTP/1.1\r\nHost: api.example.test\r\n\r\n", target.URL)
+	if err := os.WriteFile(requestPath, []byte(rawRequest), 0600); err != nil {
+		t.Fatal(err)
+	}
+	spec := fmt.Sprintf(`openapi: 3.1.0
+info:
+  title: Remote reference must not be fetched
+  version: "1"
+paths:
+  /remote:
+    get:
+      responses:
+        "200":
+          description: remote
+          content:
+            application/json:
+              schema:
+                $ref: "%s/remote.yaml#/components/schemas/Private"
+`, remoteRef.URL)
+	if err := os.WriteFile(specPath, []byte(spec), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "run", ".", "-request", requestPath, "-openapi", specPath, "-openapi-untrusted")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("remote schema reference unexpectedly accepted: %s", out)
+	}
+	if specServerCalls.Load() != 0 || targetCalls.Load() != 0 {
+		t.Fatalf("unexpected network traffic: remote-spec=%d target=%d", specServerCalls.Load(), targetCalls.Load())
+	}
+}
