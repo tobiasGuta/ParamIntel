@@ -20,27 +20,27 @@ import (
 )
 
 const (
-	openAPIWorkerArg          = "--internal-paramintel-openapi-worker"
-	defaultOpenAPITimeout     = 15 * time.Second
-	defaultOpenAPIMemoryMiB   = 768
-	minOpenAPIMemoryMiB       = 256
-	maxOpenAPIMemoryMiB       = 2048
-	maxWorkerResponseBytes    = 8 << 20
-	maxWorkerDiagnosticBytes  = 4096
-	openAPIWorkerMemoryEnv    = "PARAMINTEL_INTERNAL_OPENAPI_MEMORY_MIB"
-	openAPIWorkerCPUEnv       = "PARAMINTEL_INTERNAL_OPENAPI_CPU_SECONDS"
+	openAPIWorkerArg         = "--internal-paramintel-openapi-worker"
+	defaultOpenAPITimeout    = 15 * time.Second
+	defaultOpenAPIMemoryMiB  = 768
+	minOpenAPIMemoryMiB      = 256
+	maxOpenAPIMemoryMiB      = 2048
+	maxWorkerResponseBytes   = 8 << 20
+	maxWorkerDiagnosticBytes = 4096
+	openAPIWorkerMemoryEnv   = "PARAMINTEL_INTERNAL_OPENAPI_MEMORY_MIB"
+	openAPIWorkerCPUEnv      = "PARAMINTEL_INTERNAL_OPENAPI_CPU_SECONDS"
 )
 
 var ErrIsolatedOpenAPIUnavailable = errors.New("untrusted OpenAPI isolation is supported only on Linux")
 var ErrIsolatedOpenAPIFailed = errors.New("isolated OpenAPI worker failed")
 
 type openAPIWorkerRequest struct {
-	Phase    string                 `json:"phase"`
-	Spec     []byte                 `json:"spec"`
-	Limit    int64                  `json:"limit"`
-	Template model.RequestTemplate  `json:"template"`
-	Baseline model.BaselineProfile  `json:"baseline"`
-	Config   schemaintel.Config     `json:"config"`
+	Phase    string                `json:"phase"`
+	Spec     []byte                `json:"spec"`
+	Limit    int64                 `json:"limit"`
+	Template model.RequestTemplate `json:"template"`
+	Baseline model.BaselineProfile `json:"baseline"`
+	Config   schemaintel.Config    `json:"config"`
 }
 
 type openAPIWorkerResponse struct {
@@ -117,15 +117,15 @@ func minimizeWorkerAnalysisContext(req *openAPIWorkerRequest) error {
 		}
 	}
 	req.Template = model.RequestTemplate{
-		Method: req.Template.Method,
-		URL: safeURL,
+		Method:  req.Template.Method,
+		URL:     safeURL,
 		Headers: http.Header{"Content-Type": []string{req.Template.Headers.Get("Content-Type")}},
-		Body: scrubbed,
+		Body:    scrubbed,
 	}
 	req.Baseline = model.BaselineProfile{
-		StatusCode: req.Baseline.StatusCode,
-		StatusStable: req.Baseline.StatusStable,
-		ContentType: req.Baseline.ContentType,
+		StatusCode:        req.Baseline.StatusCode,
+		StatusStable:      req.Baseline.StatusStable,
+		ContentType:       req.Baseline.ContentType,
 		ContentTypeStable: req.Baseline.ContentTypeStable,
 	}
 	return nil
