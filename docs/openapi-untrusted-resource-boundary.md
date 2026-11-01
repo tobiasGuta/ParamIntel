@@ -57,8 +57,14 @@ paramintel -request captured.txt -openapi third-party.yaml \
   worker after they are applied.
 - The parent enforces a **wall-clock deadline** using `exec.CommandContext`
   (default 15 seconds per worker, allowed range 1 second to 1 minute).
-  Timeouts, signals, crashes and malformed/oversized responses discard all
-  partial schema evidence.
+  The Linux worker runs in a distinct process group; cancellation sends
+  SIGKILL to that group, including normal descendants. A two-second
+  `exec.Cmd.WaitDelay` closes inherited output pipes if descendants keep
+  them open after the parent exits. This bounds the command wait, but
+  descendants deliberately escaping the process group are **not** guaranteed
+  to be terminated; full descendant containment remains a separate sandbox
+  requirement. Timeouts, signals, crashes and malformed/oversized responses
+  discard all partial schema evidence.
 - Default `RLIMIT_DATA`: 768 MiB; configurable 256 to 2048 MiB. The default
   `GOMEMLIMIT` is set to half the selected kernel data limit **as an advisory
   GC target**, not a replacement for kernel enforcement.
@@ -92,6 +98,7 @@ trust policy have been independently reviewed.
    using a local test server (no external target).
 4. Verify oversized input is rejected before HTTP requests in either mode.
 5. Verify invalid worker phases, mismatched size budgets, cancellation,
+   bounded waits when descendants inherit output pipes, process-group kill,
    output truncation, non-Linux behavior and child memory/CPU limit checks.
 6. Run `go test ./...`, `go vet ./...`, race tests and Linux/Windows builds
    in GitHub Actions. The Windows binary supports trusted size-bounded local
