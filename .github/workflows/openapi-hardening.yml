@@ -1,0 +1,40 @@
+name: OpenAPI untrusted-input hardening
+on:
+  push:
+    branches:
+      - hardening/openapi-untrusted-admission-20261101
+  pull_request:
+    paths:
+      - 'internal/schemaintel/**'
+      - 'cmd/paramintel/**'
+      - '.github/workflows/openapi-hardening.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    name: Hardening Go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        go: ['1.26.10', '1.27.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+          cache: true
+      - name: Verify parser source formatting
+        run: |
+          files="internal/schemaintel/admission.go internal/schemaintel/admission_test.go internal/schemaintel/load.go cmd/paramintel/main.go cmd/paramintel/openapi_worker.go cmd/paramintel/openapi_worker_linux.go cmd/paramintel/openapi_worker_other.go cmd/paramintel/openapi_worker_test.go cmd/paramintel/openapi_cli_test.go"
+          gofmt -d $files
+          test -z "$(gofmt -l $files)"
+      - name: Bounded input and direct parser regression tests
+        run: go test ./internal/schemaintel -run 'Test(OpenAPIDocument|Parse|LibopenapiWatch)' -count=1 -timeout=3m
+      - name: Isolated worker and CLI pre-network admission tests
+        run: go test ./cmd/paramintel -run 'Test(OpenAPIIsolation|UntrustedOpenAPI|OpenAPIWorker|CLIOpenAPIUntrusted|CLIOversizedOpenAPI)' -count=1 -v -timeout=6m
+      - name: Verify Windows can cross-compile trusted path
+        run: GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/paramintel
