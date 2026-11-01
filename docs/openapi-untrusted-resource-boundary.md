@@ -12,8 +12,15 @@ downloading or remote reference resolution has been added.
 ## Default local mode
 
 - Local OpenAPI reads require a regular file and use an explicit bounded read.
-  The `stat` check rejects a known-oversized file early; `LimitReader(max+1)`
-  also detects concurrent growth instead of silently truncating it.
+  On Linux the file is opened with `O_NONBLOCK|O_NOFOLLOW|O_CLOEXEC`;
+  this rejects a final-component symlink, and prevents named pipes from
+  blocking `open()` before the regular-file check. Other platforms reject
+  symlinks and special files through `Lstat` pre-admission; non-Linux
+  `-openapi-untrusted` remains unsupported. A parent-directory symlink
+  and blocking I/O on a remote filesystem are not comprehensively sandboxed.
+  The opened descriptor's `stat` check rejects a known-oversized file early;
+  `LimitReader(max+1)` also detects concurrent growth instead of silently
+  truncating it.
 - `schemaintel.Parse` itself checks a default **16 MiB** maximum before
   libopenapi allocates/expands the schema graph. `ParseWithLimit` accepts an
   explicit bounded limit for intentional larger specs.
@@ -76,8 +83,9 @@ trust policy have been independently reviewed.
 
 ## Verification gates
 
-1. Validate file exactly at size limit and at size limit + 1; reject special
-   files and invalid limits.
+1. Validate file exactly at size limit and at size limit + 1; reject symlinks,
+   special files (including a writerless FIFO without blocking), and invalid
+   limits.
 2. Reject oversize documents directly from `schemaintel.Parse` before building
    any model.
 3. Compare complete CLI findings in trusted vs `-openapi-untrusted` modes
