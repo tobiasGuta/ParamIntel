@@ -29,7 +29,7 @@ jobs:
           cache: true
       - name: Verify parser source formatting
         run: |
-          files="internal/schemaintel/admission.go internal/schemaintel/admission_test.go internal/schemaintel/admission_open_linux.go internal/schemaintel/admission_open_other.go internal/schemaintel/admission_open_linux_test.go internal/schemaintel/load.go cmd/paramintel/main.go cmd/paramintel/openapi_worker.go cmd/paramintel/openapi_worker_linux.go cmd/paramintel/openapi_worker_other.go cmd/paramintel/openapi_worker_test.go cmd/paramintel/openapi_cli_test.go"
+          files="internal/schemaintel/admission.go internal/schemaintel/admission_test.go internal/schemaintel/admission_open_linux.go internal/schemaintel/admission_open_other.go internal/schemaintel/admission_open_linux_test.go internal/schemaintel/load.go cmd/paramintel/main.go cmd/paramintel/openapi_worker.go cmd/paramintel/openapi_worker_linux.go cmd/paramintel/openapi_worker_other.go cmd/paramintel/openapi_worker_test.go cmd/paramintel/openapi_worker_process_linux_test.go cmd/paramintel/openapi_cli_test.go"
           gofmt -d $files
           test -z "$(gofmt -l $files)"
       - name: Bounded input and direct parser regression tests
