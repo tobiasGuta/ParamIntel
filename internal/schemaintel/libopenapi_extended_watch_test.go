@@ -125,8 +125,7 @@ func watchResourceDocument(name string) string {
   var b strings.Builder
   b.WriteString("openapi: 3.1.0\ninfo: {title: Ref chain, version: '1'}\npaths:\n  /chain:\n    get:\n      responses:\n        '200':\n          description: ok\n          content:\n            application/json:\n              schema:\n                $ref: '#/components/schemas/R0'\ncomponents:\n  schemas:\n")
   for i:=0;i<180;i++ {
-   if i==179 {fmt.Fprintf(&b,"    R%d:\n      type: object\n      properties:\n        end: {type: string}\n",i)}
-   else {fmt.Fprintf(&b,"    R%d:\n      $ref: '#/components/schemas/R%d'\n",i,i+1)}
+   if i==179 {fmt.Fprintf(&b,"    R%d:\n      type: object\n      properties:\n        end: {type: string}\n",i)} else {fmt.Fprintf(&b,"    R%d:\n      $ref: '#/components/schemas/R%d'\n",i,i+1)}
   }
   return b.String()
  case "recursive-property":
