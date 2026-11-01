@@ -41,7 +41,9 @@ paramintel -request captured.txt -openapi third-party.yaml \
   for analysis. Other request headers, cookies, query parameters, the
   original hostname, scalar JSON values and unused baseline detail are
   stripped. JSON property names are retained because they determine
-  candidate evidence.
+  candidate evidence. The worker also receives **no ambient scanner
+  environment variables** (including API keys or proxy credentials); its
+  environment contains only resource-limit and Go runtime settings.
 - The worker applies Linux `RLIMIT_DATA` to data/heap/mmap allocations and
   `RLIMIT_CPU` before decoding or parsing input. Linux 4.7+ enforces
   `RLIMIT_DATA` for `mmap`; the resource ceilings cannot be raised by the
