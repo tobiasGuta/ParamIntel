@@ -1,0 +1,39 @@
+name: libopenapi compatibility watch (isolated)
+
+on:
+  push:
+    branches:
+      - test/libopenapi-compat-20261101
+
+permissions:
+  contents: read
+
+jobs:
+  schemaintel-matrix:
+    name: libopenapi ${{ matrix.libopenapi }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        libopenapi:
+          - v0.25.0
+          - v0.42.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.10'
+          cache: false
+      - name: Pin selected version in runner only
+        run: |
+          go mod edit -require=github.com/pb33f/libopenapi@${{ matrix.libopenapi }}
+          go mod tidy
+          go list -m github.com/pb33f/libopenapi
+          git diff --stat -- go.mod go.sum
+      - name: Focused compatibility and bounded resource tests
+        run: go test -mod=mod ./internal/schemaintel -run '^TestLibopenapiWatch' -count=1 -v -timeout=3m
+      - name: Existing schema intelligence regression suite
+        run: go test -mod=mod ./internal/schemaintel -count=1 -timeout=3m
+      - name: Complete module compilation and regression tests
+        run: go test -mod=mod ./... -count=1 -timeout=4m
