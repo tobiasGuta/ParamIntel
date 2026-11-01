@@ -40,10 +40,21 @@ jobs:
           sed -i 's/if len(buildErrs) > 0 {/if buildErrs != nil {/' internal/schemaintel/load.go
           sed -i 's/errors.Join(buildErrs\.\.\.)/buildErrs/' internal/schemaintel/load.go
           git diff -- internal/schemaintel/load.go
-      - name: Focused compatibility and bounded resource tests
+      - name: Focused compatibility, evidence and resource-bound tests
         id: focused
         continue-on-error: true
+        env:
+          PARAMINTEL_WATCH_RESOURCE: '1'
+          PARAMINTEL_WATCH_SNAPSHOT_PATH: evidence.jsonl
         run: go test -mod=mod ./internal/schemaintel -run '^TestLibopenapiWatch' -count=1 -v -timeout=3m
+      - name: Upload evidence snapshot from each version
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: libopenapi-evidence-${{ matrix.libopenapi }}
+          path: evidence.jsonl
+          if-no-files-found: error
+          retention-days: 7
       - name: Existing schema intelligence regression suite
         id: schema
         continue-on-error: true
@@ -59,3 +70,19 @@ jobs:
           test '${{ steps.focused.outcome }}' = success
           test '${{ steps.schema.outcome }}' = success
           test '${{ steps.full.outcome }}' = success
+
+  compare-evidence:
+    name: Cross-version evidence snapshot comparison
+    needs: schemaintel-matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: libopenapi-evidence-*
+          path: evidence
+      - name: Compare candidate, skip and provenance snapshots byte-for-byte
+        run: |
+          echo 'Comparing complete schema-intelligence reports'
+          diff -u evidence/libopenapi-evidence-v0.25.0/evidence.jsonl evidence/libopenapi-evidence-v0.42.0/evidence.jsonl
+          echo 'WATCH_CROSS_VERSION_EVIDENCE_IDENTICAL'
