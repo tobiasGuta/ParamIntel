@@ -37,7 +37,7 @@ func TestOpenAPIWorkerProcessGroupCancellationBounded(t *testing.T) {
 // WaitDelay also bounds a normally-exited parent whose descendant keeps
 // an inherited stdout/stderr pipe open; clean up the test subprocess group.
 func TestOpenAPIWorkerInheritedPipeWaitBounded(t *testing.T) {
-	cmd := exec.Command("sh", "-c", "sleep 10 &")
+	cmd := exec.CommandContext(context.Background(), "sh", "-c", "sleep 10 &")
 	configureOpenAPIWorkerCommand(cmd)
 	cmd.WaitDelay = 200 * time.Millisecond
 	cmd.Stdout = &bytes.Buffer{}
