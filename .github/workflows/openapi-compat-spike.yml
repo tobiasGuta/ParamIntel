@@ -1,0 +1,72 @@
+name: OpenAPI compatibility spike
+
+on:
+  push:
+    branches:
+      - research/openapi-32-compat-20260926
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: libopenapi ${{ matrix.dependency }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        dependency: [pinned-v0.25.0, candidate-v0.38.7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+          cache: true
+      - name: Record environment
+        run: |
+          go version
+          go list -m github.com/pb33f/libopenapi
+      - name: Apply experimental dependency only in runner
+        if: matrix.dependency == 'candidate-v0.38.7'
+        run: |
+          go mod edit -require=github.com/pb33f/libopenapi@v0.38.7
+          go mod tidy
+          go list -m github.com/pb33f/libopenapi
+      - name: Apply v0.38 error-API shim only in runner
+        if: matrix.dependency == 'candidate-v0.38.7'
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("internal/schemaintel/load.go")
+          source = p.read_text()
+          old = '''\tif len(buildErrs) > 0 {
+          \t\treturn nil, fmt.Errorf("build openapi model: %w", errors.Join(buildErrs...))
+          \t}'''
+          new = '''\tif buildErrs != nil {
+          \t\treturn nil, fmt.Errorf("build openapi model: %w", buildErrs)
+          \t}'''
+          assert old in source, "migration shim did not match inspected production code"
+          source = source.replace(old, new).replace('\t"errors"\n', '')
+          p.write_text(source)
+          PY
+      - name: Compatibility observations
+        shell: bash
+        run: |
+          set -o pipefail
+          go test ./internal/schemaintel -run '^TestOpenAPI32CompatibilitySpike$' -count=1 -v 2>&1 | tee "${RUNNER_TEMP}/openapi-compat.log"
+      - name: All existing tests on experimental dependency
+        if: matrix.dependency == 'candidate-v0.38.7'
+        shell: bash
+        run: |
+          set -o pipefail
+          go test ./... -count=1 2>&1 | tee "${RUNNER_TEMP}/full-tests.log"
+      - name: Upload observations
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-${{ matrix.dependency }}
+          path: |
+            ${{ runner.temp }}/openapi-compat.log
+            ${{ runner.temp }}/full-tests.log
+          if-no-files-found: warn
