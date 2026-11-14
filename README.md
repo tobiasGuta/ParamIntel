@@ -10,6 +10,16 @@ Instead of treating every response difference as a valid parameter, ParamIntel a
 
 A reported parameter is a **research lead**, not proof of a vulnerability. Authorization, exploitability, business impact, and program rules still require manual validation.
 
+## Optional baseline status expectation
+
+A stable HTTP status is reproducible evidence, but it does not prove the request reached the intended authenticated application state. For a scan that should reach an authenticated HTTP 200 response, set:
+
+```sh
+paramintel -request request.txt -expect-baseline-status 200
+```
+
+ParamIntel samples the baseline first, then **stops before discovery and AI candidate generation** if the observed status is unstable or does not match the expected status (for example, a consistent HTTP 401). A matching status is a necessary check, **not proof of authentication**: use an endpoint and response context that confirm the intended identity and session. The option defaults to `0` (disabled), preserving the existing ability to study stable 401 responses intentionally. Status codes from 100 through 599 are accepted. This guard does not change 200 + `Retry-After` classification.
+
 ## Version progression
 
 ParamIntel has evolved in deliberate layers:
