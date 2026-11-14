@@ -310,6 +310,9 @@ func TestSendMutationsHTTP2PreservesJSONSemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if s.Protocol != "HTTP/2.0" {
+		t.Fatalf("HTTP/2 response protocol=%q, want HTTP/2.0", s.Protocol)
+	}
 	if !s.IsJSON {
 		t.Fatalf("HTTP/2 snapshot should contain JSON; body=%q", s.Body)
 	}
