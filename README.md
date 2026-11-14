@@ -1,4 +1,4 @@
-# ParamIntel v0.11.0
+# ParamIntel v0.11.1
 
 ParamIntel is an evidence-oriented HTTP parameter discovery and behavioral-analysis tool for authorized web security testing and bug bounty research.
 
@@ -20,6 +20,23 @@ paramintel -request request.txt -expect-baseline-status 200
 
 ParamIntel samples the baseline first, then **stops before discovery and AI candidate generation** if the observed status is unstable or does not match the expected status (for example, a consistent HTTP 401). A matching status is a necessary check, **not proof of authentication**: use an endpoint and response context that confirm the intended identity and session. The option defaults to `0` (disabled), preserving the existing ability to study stable 401 responses intentionally. Status codes from 100 through 599 are accepted. This guard does not change 200 + `Retry-After` classification.
 
+### Baseline status evidence in JSON (v0.11.1)
+
+Completed scan reports now include a `baseline.status_evidence` object, separate from parameter discovery and confidence scoring. For an authenticated endpoint where the operator specified `-expect-baseline-status 200`, an example is:
+
+```json
+"status_evidence": {
+  "first_observed_status_code": 200,
+  "status_stable": true,
+  "expected_status_code": 200,
+  "expectation": "matched"
+}
+```
+
+With no explicit status expectation, `expected_status_code` is omitted and `expectation` is `"not_configured"`. A deliberately expected HTTP 401 can also produce `"matched"`. The first observed status is labeled as such because the baseline may be unstable when no expectation is configured. Status-intent comparison is *not* proof that a session is authenticated; confirm identity and expected response context separately.
+
+A supplied expectation that is unstable or mismatched still fails closed **before discovery**, and no normal findings report is written. The JSON audit is included only in completed reports. The status audit does not contain captured cookies, bearer tokens, or response bodies, and it does not alter paired controls, rate-limit classification, confidence, or AI behavior.
+
 ## Version progression
 
 ParamIntel has evolved in deliberate layers:
@@ -35,6 +52,7 @@ ParamIntel has evolved in deliberate layers:
 - **v0.9.2 — OpenAPI nullability consistency:** preserve nullable schema provenance and withhold schema-typed shortcuts from nullable scalar declarations;
 - **v0.9.3 — supported Go runtime baseline:** move the supported minimum to Go 1.26 and validate the full release gate on Go 1.26.x and Go 1.27.x;
 - **v0.10 — AI Semantic Value Advisor:** optionally propose bounded application-specific values for known candidates after deterministic value-aware discovery cleanly misses, while preserving the same candidate/control verification and confidence model.
+- **v0.11.1 — baseline status evidence integrity:** record stable status and operator expectation in completed JSON reports without changing discovery or confidence;
 - **v0.11 — evidence-guided adaptive rescue:** rank bounded semantic-rescue work by deterministic application evidence, contextual relevance, and screening cost; expose per-candidate request accounting; and stop starting new semantic values when the remaining budget cannot complete paired-control verification.
 
 The current governing rule is:
@@ -497,7 +515,7 @@ Confirm version:
 Expected:
 
 ```text
-ParamIntel v0.11.0
+ParamIntel v0.11.1
 ```
 
 ## Basic query discovery
