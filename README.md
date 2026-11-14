@@ -37,7 +37,7 @@ With no explicit status expectation, `expected_status_code` is omitted and `expe
 
 A supplied expectation that is unstable or mismatched still fails closed **before discovery**, and no normal findings report is written. The JSON audit is included only in completed reports. The status audit does not contain captured cookies, bearer tokens, or response bodies, and it does not alter paired controls, rate-limit classification, confidence, or AI behavior.
 
-### In-scan authentication-like status drift (proposed safeguard)
+### In-scan authentication-like status drift (v0.11.2)
 
 When `-expect-baseline-status` is set to a successful HTTP 2xx status, ParamIntel now treats a **later probe response of HTTP 401 or 403** as a signal to check whether the initial application state changed. The operator still has to confirm identity and session validity: HTTP status alone is not proof of authentication.
 
