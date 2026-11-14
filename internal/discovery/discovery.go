@@ -22,6 +22,10 @@ type RescuePlanObserver func(eligibleCandidates, budget int)
 type RescueAuditObserver func(model.RescueCandidateAudit)
 
 type Config struct {
+	// ExpectedBaselineStatus is the operator-declared initial HTTP status.
+	// A stable expected 2xx enables bounded authentication-like status
+	// rechecks during discovery; zero leaves legacy behavior unchanged.
+	ExpectedBaselineStatus int
 	ChunkSize            int
 	Trials               int
 	MinConfidence        float64
@@ -43,6 +47,7 @@ type Config struct {
 type Engine struct {
 	Client *http.Client
 	Config Config
+	driftBudget *driftRecheckBudget
 }
 
 func (e Engine) Scan(ctx context.Context, tmpl model.RequestTemplate, profile model.BaselineProfile, words []string) ([]model.ParameterResult, error) {
@@ -83,6 +88,10 @@ func (e Engine) ScanWithCandidates(ctx context.Context, tmpl model.RequestTempla
 		return nil, err
 	}
 	groups := groupTargets(targets, cfg.ChunkSize)
+	if cfg.ExpectedBaselineStatus >= 200 && cfg.ExpectedBaselineStatus <= 299 &&
+		profile.StatusStable && profile.StatusCode == cfg.ExpectedBaselineStatus {
+		e.driftBudget = &driftRecheckBudget{remaining: driftMaxRecheckRequests}
+	}
 	e.verbosef("[*] Active locations: %s\n", strings.Join(targetLocations(targets), ","))
 	if len(admittedSeeds) > 0 {
 		e.verbosef("[*] Prioritized %d contextual candidate placements\n", len(admittedSeeds))

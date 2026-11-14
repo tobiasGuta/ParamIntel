@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tobiasGuta/ParamIntel/internal/baseline"
 	cmp "github.com/tobiasGuta/ParamIntel/internal/compare"
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 	"github.com/tobiasGuta/ParamIntel/internal/mutate"
@@ -170,7 +169,7 @@ func (e Engine) groupInteresting(ctx context.Context, tmpl model.RequestTemplate
 	for _, candidate := range group {
 		mutations = append(mutations, e.mutation(candidate, value))
 	}
-	s, err := baseline.SendMutations(ctx, e.Client, tmpl, mutations)
+	s, err := e.sendProbe(ctx, tmpl, p, mutations)
 	if err != nil {
 		return false, fmt.Errorf("probe group %s: %w", fmtCandidate(group[0]), err)
 	}

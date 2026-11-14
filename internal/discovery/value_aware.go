@@ -3,7 +3,6 @@ package discovery
 import (
 	"context"
 
-	"github.com/tobiasGuta/ParamIntel/internal/baseline"
 	cmp "github.com/tobiasGuta/ParamIntel/internal/compare"
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 	"github.com/tobiasGuta/ParamIntel/internal/semantics"
@@ -85,7 +84,7 @@ func (e Engine) semanticRescueValuesBudgeted(ctx context.Context, tmpl model.Req
 		if !budget.reserve(1) {
 			return model.ParameterResult{}, model.ProbeValue{}, false, nil
 		}
-		s, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(candidate, value)})
+		s, err := e.sendProbe(ctx, tmpl, p, []model.Mutation{e.mutation(candidate, value)})
 		if err != nil {
 			return model.ParameterResult{}, model.ProbeValue{}, false, err
 		}
@@ -103,7 +102,7 @@ func (e Engine) semanticRescueValuesBudgeted(ctx context.Context, tmpl model.Req
 		control := candidate
 		control.Name = "zz_pi_" + controlToken
 		control.Sources = nil
-		cs, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(control, value)})
+		cs, err := e.sendProbe(ctx, tmpl, p, []model.Mutation{e.mutation(control, value)})
 		if err != nil {
 			return model.ParameterResult{}, model.ProbeValue{}, false, err
 		}

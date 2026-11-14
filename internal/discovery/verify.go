@@ -8,7 +8,6 @@ import (
 	"io"
 	"sort"
 
-	"github.com/tobiasGuta/ParamIntel/internal/baseline"
 	cmp "github.com/tobiasGuta/ParamIntel/internal/compare"
 	"github.com/tobiasGuta/ParamIntel/internal/confidence"
 	"github.com/tobiasGuta/ParamIntel/internal/model"
@@ -45,7 +44,7 @@ func (e Engine) verifyWithValue(ctx context.Context, tmpl model.RequestTemplate,
 	candChanged, ctrlChanged := 0, 0
 	evidence := map[string]model.Difference{}
 	for i := 0; i < trials; i++ {
-		s, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(candidate, value)})
+		s, err := e.sendProbe(ctx, tmpl, p, []model.Mutation{e.mutation(candidate, value)})
 		if err != nil {
 			return model.ParameterResult{}, err
 		}
@@ -66,7 +65,7 @@ func (e Engine) verifyWithValue(ctx context.Context, tmpl model.RequestTemplate,
 		control.Sources = nil
 		// JSONScaffoldParent is deliberately preserved. The candidate and
 		// negative control must differ only by leaf name, never by structure.
-		cs, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(control, value)})
+		cs, err := e.sendProbe(ctx, tmpl, p, []model.Mutation{e.mutation(control, value)})
 		if err != nil {
 			return model.ParameterResult{}, err
 		}

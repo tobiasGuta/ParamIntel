@@ -37,6 +37,22 @@ With no explicit status expectation, `expected_status_code` is omitted and `expe
 
 A supplied expectation that is unstable or mismatched still fails closed **before discovery**, and no normal findings report is written. The JSON audit is included only in completed reports. The status audit does not contain captured cookies, bearer tokens, or response bodies, and it does not alter paired controls, rate-limit classification, confidence, or AI behavior.
 
+### In-scan authentication-like status drift (proposed safeguard)
+
+When `-expect-baseline-status` is set to a successful HTTP 2xx status, ParamIntel now treats a **later probe response of HTTP 401 or 403** as a signal to check whether the initial application state changed. The operator still has to confirm identity and session validity: HTTP status alone is not proof of authentication.
+
+For `GET`, `HEAD`, and `OPTIONS`, each anomalous probe triggers **two unmodified replay requests** using the original captured request. These rechecks use the same client, transport, request pacing, and credential headers as ordinary scans:
+
+- Both rechecks return the expected 2xx status: preserve the original 401/403 as candidate-specific behavior and continue the ordinary candidate/negative-control verifier.
+- Both rechecks return 401/403: abort the entire scan with a typed confirmed-drift error; no normal findings report is written.
+- Mixed or unexpected rechecks: abort as ambiguous instead of trusting questionable evidence.
+- HTTP 429 and HTTP 503 with valid Retry-After still use existing typed backoff handling. HTTP 200 with Retry-After is not reclassified.
+- State-changing request methods cannot safely issue *extra* unmodified replays: abort on an auth-like probe response without sending rechecks.
+
+At most **12 additional clean recheck requests per scan** are admitted. Exhaustion fails closed; these exceptional integrity-check requests are separate from the semantic-rescue request budget. No automatic credential refresh, cookie regeneration, authentication inference, or retry of the original candidate probe occurs.
+
+The safeguard is opt-in through an explicitly expected **2xx** status. Without `-expect-baseline-status`, discovery keeps its previous behavior. Status-preserving login pages (HTTP 200), login redirects, and other non-401/403 session changes are **outside this initial scope**.
+
 ## Version progression
 
 ParamIntel has evolved in deliberate layers:
