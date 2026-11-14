@@ -3,7 +3,6 @@ package discovery
 import (
 	"context"
 
-	"github.com/tobiasGuta/ParamIntel/internal/baseline"
 	cmp "github.com/tobiasGuta/ParamIntel/internal/compare"
 	"github.com/tobiasGuta/ParamIntel/internal/model"
 	"github.com/tobiasGuta/ParamIntel/internal/semantics"
@@ -14,7 +13,7 @@ func (e Engine) characterize(ctx context.Context, tmpl model.RequestTemplate, p 
 	if err != nil {
 		return err
 	}
-	generic, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(candidate, model.StringValue(probeToken))})
+	generic, err := e.sendProbe(ctx, tmpl, p, []model.Mutation{e.mutation(candidate, model.StringValue(probeToken))})
 	if err != nil {
 		return err
 	}
@@ -27,7 +26,7 @@ func (e Engine) characterize(ctx context.Context, tmpl model.RequestTemplate, p 
 	}
 
 	for _, value := range semantics.ProfileValues(candidate.Name, candidate.Location) {
-		s, err := baseline.SendMutations(ctx, e.Client, tmpl, []model.Mutation{e.mutation(candidate, value)})
+		s, err := e.sendProbe(ctx, tmpl, p, []model.Mutation{e.mutation(candidate, value)})
 		if err != nil {
 			return err
 		}
