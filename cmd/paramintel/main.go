@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	version                  = "0.11.0"
+	version                  = "0.11.1"
 	defaultAIProviderTimeout = 2 * time.Minute
 )
 
@@ -417,7 +417,7 @@ func main() {
 		Version:        version,
 		Target:         tmpl.URL,
 		Method:         tmpl.Method,
-		Baseline:       model.BaselineSummary{Samples: profile.Samples, StableJSONPaths: len(profile.StableJSONPaths), BodyLenMin: profile.BodyLenMin, BodyLenMax: profile.BodyLenMax},
+		Baseline:       buildBaselineSummary(profile, expectedBaselineStatus),
 		AIAdvisor:      aiSummary,
 		AIValueAdvisor: aiValueSummary,
 		ValueAware:     valueAwareSummary,

@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.11.1 (proposed)
+
+- Added `baseline.status_evidence` to completed JSON reports, recording the first observed HTTP status, status stability, the optional explicitly expected status, and whether that expectation matched.
+- Preserved existing `baseline` summary keys and the fail-closed `-expect-baseline-status` gate. Mismatched or unstable declared expectations still stop before discovery and do not produce a normal findings report.
+- Explicitly distinguish `"not_configured"` from `"matched"`: HTTP 200 alone does not establish a valid authenticated application state.
+- Added localhost CLI acceptance tests for expected HTTP 200, deliberately expected HTTP 401, unconfigured expectation, and rejected stable HTTP 401 with expected HTTP 200.
+- No changes to response classification, retries, cookie handling, AI generation, schema candidates, random-name controls, confidence, or finding decisions.
+
 ## v0.11.0
 
 - Added evidence-guided semantic-rescue scheduling so bounded request budget is allocated by deterministic evidence tier, candidate-source priority, local contextual relevance, lower screening cost, then stable existing order.
