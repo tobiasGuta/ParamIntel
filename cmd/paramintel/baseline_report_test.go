@@ -117,17 +117,22 @@ func TestCLIBaselineStatusEvidence(t *testing.T) {
 			if err := os.WriteFile(requestPath, []byte(raw), 0600); err != nil {
 				t.Fatal(err)
 			}
-			cmd := exec.Command("go", "run", ".",
+			args := []string{
+				".",
 				"-request", requestPath,
 				"-scheme", "http",
 				"-locations", "query",
 				"-baseline", "3",
 				"-trials", "2",
-				"-expect-baseline-status", fmt.Sprint(tt.expected),
 				"-characterize=false",
 				"-value-aware=false",
 				"-output", reportPath,
-			)
+			}
+			// Exercise the CLI's actual default when no expectation is set.
+			if tt.expected != 0 {
+				args = append(args, "-expect-baseline-status", fmt.Sprint(tt.expected))
+			}
+			cmd := exec.Command("go", "run", args...)
 			combined, runErr := cmd.CombinedOutput()
 			if tt.wantFailure {
 				if runErr == nil || !strings.Contains(string(combined), "stopping before discovery") ||
