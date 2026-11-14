@@ -416,6 +416,31 @@ Verified AI-value discoveries record `discovery_mode: ai_value_aware`. AI ration
 
 The reproducible localhost acceptance lab is in `labs/semantic-value-advisor`.
 
+## Optional baseline HTTP status expectation
+
+A repeatable HTTP response can form a technically stable baseline even when it
+is **not the application state the operator intended**. For example, a mobile
+API replay that consistently returns HTTP 401 can look stable despite an
+expected authenticated HTTP 200.
+
+Use `-expect-status` when the expected state is known:
+
+```sh
+paramintel -request request.txt -expect-status 200 -baseline 3
+```
+
+The default `-expect-status 0` preserves existing status-agnostic behavior.
+With a nonzero expectation, ParamIntel requires all baseline samples to have
+a stable status matching that expectation. A mismatch or unstable status aborts
+**before candidate, random-name control, and semantic-rescue probes**, and
+before a normal findings report can be written. This does not assert that an
+HTTP 200 means authentication or application semantics are correct; operators
+must still verify the request has the intended authorization and session state.
+A deliberate unauthenticated test can use `-expect-status 401`.
+
+This is a local, operator-supplied assertion. No credentials or response
+contents are sent to an external service to determine the expected status.
+
 ## Rate-limit and backoff integrity
 
 Known limiter/backoff responses are rejected before they can become behavioral evidence.

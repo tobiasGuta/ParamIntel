@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -37,7 +38,7 @@ func main() {
 	var openAPIMemoryMiB int
 	var openAPIUntrusted bool
 	var aiProviderName, aiModel, aiAPIKeyEnv, aiContextResponsePath string
-	var baselineN, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget int
+	var baselineN, expectedBaselineStatus, chunk, trials, jsonDepth, valueAwareBudget, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget int
 	var timeout, delay, aiTimeout time.Duration
 	var minConf float64
 	var verbose, characterize, valueAware, allowStateChanging, showVersion, aiAdvisorEnabled, aiValueAdvisorEnabled, jsonScaffold bool
@@ -55,6 +56,7 @@ func main() {
 	flag.StringVar(&scheme, "scheme", "https", "scheme for relative raw requests: http or https")
 	flag.StringVar(&locationSpec, "locations", "auto", "discovery locations: auto or comma-separated query,form,json")
 	flag.IntVar(&baselineN, "baseline", 3, "number of baseline requests")
+	flag.IntVar(&expectedBaselineStatus, "expect-status", 0, "optional required stable baseline HTTP status (100-599); abort discovery on a mismatch; 0 disables the guard")
 	flag.IntVar(&chunk, "chunk", 64, "initial batch size")
 	flag.IntVar(&trials, "trials", 3, "verification and negative-control trials")
 	flag.IntVar(&jsonDepth, "json-depth", 3, "maximum nested JSON object depth to probe")
@@ -94,6 +96,7 @@ func main() {
 	if aiValueAdvisorEnabled && (!valueAware || valueAwareBudget == 0) {
 		fatal(fmt.Errorf("-ai-value-advisor requires -value-aware=true and a positive -value-aware-budget"))
 	}
+	fatal(validateExpectedBaselineStatus(expectedBaselineStatus))
 	fatal(validateDelay(delay))
 	fatal(validateAIOptions(aiAdvisorEnabled, aiValueAdvisorEnabled, aiCandidateBudget, aiValueBudget, aiValueCandidateBudget, aiTimeout))
 	fatal(validateJSONScaffoldOptions(jsonScaffold, contextResponsePath))
@@ -188,10 +191,13 @@ func main() {
 	}
 	profile, baselineSnapshot, err := baseline.BuildWithSnapshot(ctx, client, tmpl, baselineN)
 	fatal(err)
+	fatal(checkExpectedBaselineStatus(expectedBaselineStatus, profile))
 	if verbose {
 		fmt.Printf("[+] Baseline ready\n")
 		fmt.Printf("    samples: %d\n", profile.Samples)
 		fmt.Printf("    status: %d (stable=%t)\n", profile.StatusCode, profile.StatusStable)
+		fmt.Printf("    Go runtime: %s\n", runtime.Version())
+		fmt.Printf("    first baseline HTTP protocol: %s\n", baselineSnapshot.Protocol)
 		fmt.Printf("    body length: %d-%d bytes\n", profile.BodyLenMin, profile.BodyLenMax)
 		fmt.Printf("    stable JSON paths: %d\n", len(profile.StableJSONPaths))
 		if delay > 0 {
