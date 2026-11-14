@@ -118,7 +118,7 @@ func TestCLIBaselineStatusEvidence(t *testing.T) {
 				t.Fatal(err)
 			}
 			args := []string{
-				".",
+				"run", ".",
 				"-request", requestPath,
 				"-scheme", "http",
 				"-locations", "query",
@@ -132,7 +132,7 @@ func TestCLIBaselineStatusEvidence(t *testing.T) {
 			if tt.expected != 0 {
 				args = append(args, "-expect-baseline-status", fmt.Sprint(tt.expected))
 			}
-			cmd := exec.Command("go", "run", args...)
+			cmd := exec.Command("go", args...)
 			combined, runErr := cmd.CombinedOutput()
 			if tt.wantFailure {
 				if runErr == nil || !strings.Contains(string(combined), "stopping before discovery") ||
