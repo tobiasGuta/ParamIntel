@@ -357,6 +357,7 @@ func main() {
 	}
 
 	engine := discovery.Engine{Client: client, Config: discovery.Config{
+		ExpectedBaselineStatus: expectedBaselineStatus,
 		ChunkSize:             chunk,
 		Trials:                trials,
 		MinConfidence:         minConf,
