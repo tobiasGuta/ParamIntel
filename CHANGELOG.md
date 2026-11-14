@@ -1,6 +1,16 @@
 # Changelog
 
-## v0.11.1 (proposed)
+## v0.11.2 (release candidate)
+
+- Detect in-scan authentication-like status drift when the operator explicitly configured an expected 2xx HTTP baseline via `-expect-baseline-status`.
+- After a later probe returns HTTP 401 or 403, GET/HEAD/OPTIONS scans perform two unchanged baseline rechecks. Two expected statuses preserve candidate-specific evidence for normal paired-control verification; two authorization-like statuses abort as confirmed drift; mixed rechecks abort as ambiguous.
+- For state-changing methods, stop on a suspicious HTTP 401/403 without performing additional potentially side-effecting clean replays.
+- Cap extra clean rechecks at 12 requests per scan; exhaustion fails closed rather than accepting uncertain evidence.
+- Cover group screening, repeated candidate/control verification, value-aware rescue, and characterization; preserve existing rate-limit/backoff classification, including HTTP 200 with Retry-After.
+- Add synthetic server and CLI regression tests plus Fedora localhost acceptance for a 200 → 401 session-expiration sequence with no normal findings report.
+- Preserve the existing report schema, parameter-confidence rules, AI behavior, and candidate discovery when the status expectation is not configured.
+
+## v0.11.1
 
 - Added `baseline.status_evidence` to completed JSON reports, recording the first observed HTTP status, status stability, the optional explicitly expected status, and whether that expectation matched.
 - Preserved existing `baseline` summary keys and the fail-closed `-expect-baseline-status` gate. Mismatched or unstable declared expectations still stop before discovery and do not produce a normal findings report.
