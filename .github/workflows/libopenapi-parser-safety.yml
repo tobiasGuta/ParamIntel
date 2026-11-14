@@ -20,8 +20,8 @@ jobs:
       fail-fast: false
       matrix:
         go:
-          - '1.26.10'
-          - '1.27.3'
+          - '1.26.11'
+          - '1.27.4'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
