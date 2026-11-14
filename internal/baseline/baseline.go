@@ -111,7 +111,9 @@ func SendMutations(ctx context.Context, client *http.Client, tmpl model.RequestT
 	if err != nil {
 		return model.Snapshot{}, err
 	}
-	return cmp.Snapshot(resp.StatusCode, resp.Header.Clone(), body), nil
+	snapshot := cmp.Snapshot(resp.StatusCode, resp.Header.Clone(), body)
+	snapshot.Protocol = resp.Proto
+	return snapshot, nil
 }
 
 func classifyBackoff(resp *http.Response, now time.Time) error {
