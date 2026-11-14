@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -195,6 +196,8 @@ func main() {
 		fmt.Printf("[+] Baseline ready\n")
 		fmt.Printf("    samples: %d\n", profile.Samples)
 		fmt.Printf("    status: %d (stable=%t)\n", profile.StatusCode, profile.StatusStable)
+		fmt.Printf("    Go runtime: %s\n", runtime.Version())
+		fmt.Printf("    first baseline HTTP protocol: %s\n", baselineSnapshot.Protocol)
 		fmt.Printf("    body length: %d-%d bytes\n", profile.BodyLenMin, profile.BodyLenMax)
 		fmt.Printf("    stable JSON paths: %d\n", len(profile.StableJSONPaths))
 		if delay > 0 {
