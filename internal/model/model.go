@@ -272,9 +272,21 @@ type ScanReport struct {
 	Parameters     []ParameterResult      `json:"parameters"`
 }
 
+// BaselineStatusEvidence records *HTTP status* reproducibility and whether
+// it matched an operator-supplied expectation. A match is not proof of valid
+// authentication or authorization. No request headers or credentials appear
+// in this audit field.
+type BaselineStatusEvidence struct {
+	FirstObservedStatusCode int    `json:"first_observed_status_code"`
+	StatusStable            bool   `json:"status_stable"`
+	ExpectedStatusCode      *int   `json:"expected_status_code,omitempty"`
+	Expectation             string `json:"expectation"`
+}
+
 type BaselineSummary struct {
 	Samples         int `json:"samples"`
 	StableJSONPaths int `json:"stable_json_paths"`
 	BodyLenMin      int `json:"body_len_min"`
 	BodyLenMax      int `json:"body_len_max"`
+	StatusEvidence  BaselineStatusEvidence `json:"status_evidence"`
 }
