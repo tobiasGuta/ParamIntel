@@ -1,0 +1,93 @@
+name: Publish ParamIntel v0.11.2
+
+on:
+  push:
+    branches:
+      - ops/publish-v0.11.2
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout the reviewed release commit
+        uses: actions/checkout@v4
+        with:
+          ref: bf62afdc761b57a886256b37a29ba8ae33838969
+          fetch-depth: 0
+
+      - name: Verify target and prevent duplicate publication
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = "tobiasGuta/ParamIntel"
+          expected=bf62afdc761b57a886256b37a29ba8ae33838969
+          test "$(git rev-parse HEAD)" = "$expected"
+          current_main="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [ "$current_main" != "$expected" ]; then
+            echo "main moved since the approved release; refuse publication"
+            exit 1
+          fi
+          grep -F 'version                  = "0.11.2"' cmd/paramintel/main.go
+          test -s RELEASE_NOTES_v0.11.2.md
+          if gh release view v0.11.2 >/dev/null 2>&1; then
+            echo "v0.11.2 release already exists; refuse duplicate publication"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin refs/tags/v0.11.2 >/dev/null 2>&1; then
+            echo "v0.11.2 tag already exists; refuse to alter it"
+            exit 1
+          fi
+
+      - name: Publish v0.11.2 GitHub release and tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/paramintel-v0.11.2-notes.md" <<'NOTES'
+          ## Authentication-drift evidence integrity
+
+          ParamIntel v0.11.2 packages the in-scan authentication-like status-drift safeguard and additional HTTP 403 regression coverage.
+
+          For scans with an explicitly expected, stable HTTP 2xx baseline, a later HTTP 401 or 403 probe can signal that the original session or application state changed. For GET, HEAD, and OPTIONS, ParamIntel performs two unchanged captured-request rechecks before treating the anomalous probe as evidence. Confirmed or ambiguous drift stops the scan without writing a normal findings report, while candidate-specific 401/403 behavior can still pass through normal paired candidate/control verification if both clean rechecks remain stable.
+
+          Extra clean rechecks are limited to 12 requests per scan. State-changing requests fail closed on these anomalies rather than triggering potentially side-effecting automatic replays. Existing HTTP 429 and qualifying HTTP 503 backoff handling is preserved; HTTP 200 with Retry-After is not automatically reclassified.
+
+          ## Validation
+
+          - Full Go 1.26.11 / Go 1.27.4 test suites, vet, race detection, Linux and Windows builds, JSON compatibility, OpenAPI hardening, and govulncheck passed.
+          - Additional regression tests cover confirmed HTTP 403 drift and candidate-specific HTTP 403 responses.
+          - Fedora local acceptance verified the 200, 200, 200, 401, 401, 401 response sequence, a confirmed-drift stop, and no generated findings report.
+
+          ## Limits
+
+          This opt-in safeguard does **not** establish authentication identity or detect HTTP 200 login pages, redirects, silent cookie changes, or other status-preserving authentication drift. It makes no changes to candidate generation, AI, parameter confidence, or exploitability judgments.
+
+          See `RELEASE_NOTES_v0.11.2.md` in the tagged source for the detailed scope and test matrix.
+          NOTES
+          gh release create v0.11.2 \
+            --target bf62afdc761b57a886256b37a29ba8ae33838969 \
+            --title "ParamIntel v0.11.2 — Authentication-Drift Evidence Integrity" \
+            --notes-file "$RUNNER_TEMP/paramintel-v0.11.2-notes.md" \
+            --latest
+
+      - name: Verify published release and tag target
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          expected=bf62afdc761b57a886256b37a29ba8ae33838969
+          release_target="$(gh api repos/tobiasGuta/ParamIntel/releases/tags/v0.11.2 --jq .target_commitish)"
+          tag_target="$(gh api repos/tobiasGuta/ParamIntel/git/ref/tags/v0.11.2 --jq .object.sha)"
+          if [ "$release_target" != "$expected" ] || [ "$tag_target" != "$expected" ]; then
+            echo "release and tag target did not match the vetted commit"
+            exit 1
+          fi
+          gh release view v0.11.2 --json url,tagName,isDraft,isPrerelease
