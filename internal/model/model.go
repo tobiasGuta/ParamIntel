@@ -26,6 +26,7 @@ type ResponseFeatures struct {
 
 type Snapshot struct {
 	StatusCode int
+	Protocol   string
 	Headers    http.Header
 	Body       []byte
 	JSONPaths  map[string]string
