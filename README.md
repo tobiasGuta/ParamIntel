@@ -1,4 +1,4 @@
-# ParamIntel v0.11.1
+# ParamIntel v0.11.2
 
 ParamIntel is an evidence-oriented HTTP parameter discovery and behavioral-analysis tool for authorized web security testing and bug bounty research.
 
@@ -37,7 +37,7 @@ With no explicit status expectation, `expected_status_code` is omitted and `expe
 
 A supplied expectation that is unstable or mismatched still fails closed **before discovery**, and no normal findings report is written. The JSON audit is included only in completed reports. The status audit does not contain captured cookies, bearer tokens, or response bodies, and it does not alter paired controls, rate-limit classification, confidence, or AI behavior.
 
-### In-scan authentication-like status drift (proposed safeguard)
+### In-scan authentication-like status drift (v0.11.2)
 
 When `-expect-baseline-status` is set to a successful HTTP 2xx status, ParamIntel now treats a **later probe response of HTTP 401 or 403** as a signal to check whether the initial application state changed. The operator still has to confirm identity and session validity: HTTP status alone is not proof of authentication.
 
@@ -68,6 +68,7 @@ ParamIntel has evolved in deliberate layers:
 - **v0.9.2 — OpenAPI nullability consistency:** preserve nullable schema provenance and withhold schema-typed shortcuts from nullable scalar declarations;
 - **v0.9.3 — supported Go runtime baseline:** move the supported minimum to Go 1.26 and validate the full release gate on Go 1.26.x and Go 1.27.x;
 - **v0.10 — AI Semantic Value Advisor:** optionally propose bounded application-specific values for known candidates after deterministic value-aware discovery cleanly misses, while preserving the same candidate/control verification and confidence model.
+- **v0.11.2 — in-scan authentication-drift integrity:** bounded clean rechecks after anomalous 401/403 probe responses, with fail-closed status-drift diagnostics and side-effect-safe handling;
 - **v0.11.1 — baseline status evidence integrity:** record stable status and operator expectation in completed JSON reports without changing discovery or confidence;
 - **v0.11 — evidence-guided adaptive rescue:** rank bounded semantic-rescue work by deterministic application evidence, contextual relevance, and screening cost; expose per-candidate request accounting; and stop starting new semantic values when the remaining budget cannot complete paired-control verification.
 
@@ -531,7 +532,7 @@ Confirm version:
 Expected:
 
 ```text
-ParamIntel v0.11.1
+ParamIntel v0.11.2
 ```
 
 ## Basic query discovery
